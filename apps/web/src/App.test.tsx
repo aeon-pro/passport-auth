@@ -14,4 +14,6 @@ test("renders the dashboard shell with primary sections", () => {
   expect(screen.getByRole("link", { name: "Analytics" })).toHaveAttribute("href", "/analytics");
   expect(screen.getByRole("link", { name: "Configure setup" })).toHaveAttribute("href", "/setup");
   expect(screen.queryByRole("region", { name: "Auth surface" })).not.toBeInTheDocument();
+  expect(screen.queryByText("Public web")).not.toBeInTheDocument();
+  expect(screen.queryByText("localhost:8000")).not.toBeInTheDocument();
 });

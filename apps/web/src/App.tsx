@@ -33,11 +33,6 @@ export function App() {
             </a>
           ))}
         </nav>
-
-        <div className="sidebar-footer">
-          <span>Public web</span>
-          <strong>localhost:8000</strong>
-        </div>
       </aside>
 
       <main className="content">

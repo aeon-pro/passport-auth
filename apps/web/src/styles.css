@@ -123,26 +123,11 @@ small {
   outline: none;
 }
 
-.sidebar-footer {
-  display: grid;
-  gap: 6px;
-  margin-top: auto;
-  border-top: 1px solid #1c1c1f;
-  padding-top: 18px;
-}
-
-.sidebar-footer span,
 .metric span {
   color: #77777f;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-}
-
-.sidebar-footer strong {
-  color: #d8d8dd;
-  font-size: 13px;
-  font-weight: 620;
 }
 
 .content {
@@ -336,10 +321,6 @@ small {
 
   .nav a {
     text-align: center;
-  }
-
-  .sidebar-footer {
-    display: none;
   }
 
   .workspace {
