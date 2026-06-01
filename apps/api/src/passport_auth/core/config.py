@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     app_encryption_key: str = "local-development-secret-change-me"
     database_url: str | None = None
     dashboard_jwt_ttl_seconds: int = 3600
+    password_reset_otp_enabled: bool = True
+    password_reset_otp_ttl_seconds: int = 600
     web_static_dir: Path | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

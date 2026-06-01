@@ -19,6 +19,16 @@ def create_test_app() -> tuple[InMemorySetupStore, object]:
     return setup_store, app
 
 
+def create_test_app_with_settings(settings: Settings) -> tuple[InMemorySetupStore, object]:
+    setup_store = InMemorySetupStore()
+    setup_store.create_owner(
+        email="owner@example.com",
+        password="correct-horse-battery-staple",
+    )
+    app = create_app(settings=settings, setup_store=setup_store)
+    return setup_store, app
+
+
 @pytest.mark.asyncio
 async def test_owner_can_login_and_read_dashboard_profile() -> None:
     _, app = create_test_app()
@@ -74,3 +84,68 @@ async def test_login_rejects_wrong_password() -> None:
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Invalid email or password."}
+
+
+@pytest.mark.asyncio
+async def test_password_reset_otp_updates_owner_password() -> None:
+    _, app = create_test_app_with_settings(
+        Settings(app_encryption_key="test-jwt-secret", app_env="local")
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        start_response = await client.post(
+            "/api/v1/dashboard/auth/password-reset/start",
+            json={"email": "owner@example.com"},
+        )
+        otp = start_response.json()["dev_otp"]
+        confirm_response = await client.post(
+            "/api/v1/dashboard/auth/password-reset/confirm",
+            json={
+                "email": "owner@example.com",
+                "otp": otp,
+                "password": "new-correct-horse-battery-staple",
+            },
+        )
+        old_login_response = await client.post(
+            "/api/v1/dashboard/auth/login",
+            json={
+                "email": "owner@example.com",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        new_login_response = await client.post(
+            "/api/v1/dashboard/auth/login",
+            json={
+                "email": "owner@example.com",
+                "password": "new-correct-horse-battery-staple",
+            },
+        )
+
+    assert start_response.status_code == 200
+    assert start_response.json()["sent"] is True
+    assert len(otp) == 6
+    assert confirm_response.status_code == 200
+    assert confirm_response.json() == {"ok": True}
+    assert old_login_response.status_code == 401
+    assert new_login_response.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_password_reset_otp_can_be_disabled() -> None:
+    _, app = create_test_app_with_settings(
+        Settings(
+            app_encryption_key="test-jwt-secret",
+            password_reset_otp_enabled=False,
+        )
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/dashboard/auth/password-reset/start",
+            json={"email": "owner@example.com"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Password reset is disabled."}

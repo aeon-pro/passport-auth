@@ -1,3 +1,5 @@
+import secrets
+import time
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -34,6 +36,35 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str
     user: DashboardUserResponse
+
+
+class PasswordResetStartRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class PasswordResetStartResponse(BaseModel):
+    sent: bool
+    dev_otp: str | None = None
+
+
+class PasswordResetConfirmRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    otp: str = Field(min_length=6, max_length=16)
+    password: str = Field(min_length=12, max_length=1024)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+
+class OkResponse(BaseModel):
+    ok: bool
 
 
 def get_settings(request: Request) -> Settings:
@@ -97,6 +128,62 @@ def login(
         token_type="bearer",
         user=build_dashboard_user(owner),
     )
+
+
+@router.post("/password-reset/start")
+def start_password_reset(
+    payload: PasswordResetStartRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
+    setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+) -> PasswordResetStartResponse:
+    if not settings.password_reset_otp_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Password reset is disabled.",
+        )
+
+    owner = setup_store.get_owner_by_email(payload.email)
+    if not owner:
+        return PasswordResetStartResponse(sent=True)
+
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    setup_store.create_password_reset_otp(
+        email=owner.email,
+        otp=otp,
+        expires_at=int(time.time()) + settings.password_reset_otp_ttl_seconds,
+    )
+
+    return PasswordResetStartResponse(
+        sent=True,
+        dev_otp=otp if settings.app_env != "production" else None,
+    )
+
+
+@router.post("/password-reset/confirm")
+def confirm_password_reset(
+    payload: PasswordResetConfirmRequest,
+    setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+) -> OkResponse:
+    owner = setup_store.get_owner_by_email(payload.email)
+    if not owner:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset code.",
+        )
+
+    is_valid_otp = setup_store.consume_password_reset_otp(
+        email=owner.email,
+        otp=payload.otp,
+        now=int(time.time()),
+    )
+    if not is_valid_otp:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset code.",
+        )
+
+    setup_store.update_owner_password(email=owner.email, password=payload.password)
+    return OkResponse(ok=True)
 
 
 @router.get("/me")
