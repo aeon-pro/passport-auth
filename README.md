@@ -27,4 +27,30 @@ docs/
 
 This repository is being built incrementally with small feature commits. The first production target is Coolify using Docker Compose with one exposed public web container and internal Postgres, Redis, and ClickHouse services.
 
-Local boot instructions will be added with the backend, frontend, and Docker Compose scaffolds.
+### Backend
+
+```bash
+cd apps/api
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[dev]'
+.venv/bin/python -m pytest
+.venv/bin/python -m ruff check .
+```
+
+### Frontend
+
+```bash
+cd apps/web
+npm install
+npm test
+npm run build
+```
+
+### Docker Compose
+
+```bash
+cp .env.example .env
+docker compose up --build
+```
+
+The public service is exposed on `http://localhost:8000` by default. Postgres, Redis, and ClickHouse are internal Compose services.
