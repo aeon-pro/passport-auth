@@ -222,6 +222,7 @@ small {
 }
 
 .setup-panel,
+.setup-form,
 .metric {
   border: 1px solid #252529;
   border-radius: 8px;
@@ -269,12 +270,14 @@ small {
   min-height: 42px;
   align-items: center;
   justify-content: center;
+  border: 0;
   border-radius: 8px;
   background: #f5f5f7;
   color: #050505;
   padding: 0 16px;
   font-size: 13px;
   font-weight: 600;
+  cursor: pointer;
 }
 
 .primary-action:hover,
@@ -302,6 +305,70 @@ small {
   font-size: 38px;
   font-weight: 600;
   line-height: 0.9;
+}
+
+.setup-route {
+  display: grid;
+  max-width: 840px;
+  gap: 30px;
+}
+
+.setup-form {
+  display: grid;
+  gap: 24px;
+  padding: 22px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+  color: #d6d6db;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.field input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid #2a2a2f;
+  border-radius: 8px;
+  background: #050506;
+  color: #f5f5f7;
+  font: inherit;
+  padding: 0 12px;
+}
+
+.field input::placeholder {
+  color: #5f5f67;
+}
+
+.field input:focus {
+  border-color: #6a6a72;
+  outline: none;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.secondary-action {
+  color: #9b9ba3;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.secondary-action:hover,
+.secondary-action:focus-visible {
+  color: #f5f5f7;
+  outline: none;
 }
 
 @media (max-width: 960px) {
@@ -351,7 +418,19 @@ small {
   }
 
   .metric-grid,
-  .nav {
+  .nav,
+  .form-grid {
     grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .form-grid,
+  .form-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .form-actions {
+    display: grid;
   }
 }
