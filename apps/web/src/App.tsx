@@ -12,16 +12,6 @@ export function App() {
     { label: "API keys", value: "0", detail: "Service access" },
     { label: "Events", value: "0", detail: "Last 24 hours" },
   ];
-  const surfaces = [
-    { label: "Hosted UI", detail: "/login" },
-    { label: "Public API", detail: "/api/v1" },
-    { label: "Admin", detail: "Dashboard" },
-  ];
-  const dataPlane = [
-    { label: "Postgres", detail: "Secrets + users" },
-    { label: "Redis", detail: "Codes + guards" },
-    { label: "ClickHouse", detail: "Auth events" },
-  ];
 
   return (
     <div className="app-shell">
@@ -103,34 +93,6 @@ export function App() {
               </div>
             ))}
           </div>
-
-          <section className="surface-map" aria-label="Auth surface">
-            <div className="map-column">
-              <span className="map-label">Entrypoints</span>
-              {surfaces.map((surface) => (
-                <div className="surface-node" key={surface.label}>
-                  <strong>{surface.label}</strong>
-                  <small>{surface.detail}</small>
-                </div>
-              ))}
-            </div>
-
-            <div className="service-core">
-              <span>FastAPI</span>
-              <strong>Passport Auth</strong>
-              <small>web container</small>
-            </div>
-
-            <div className="map-column">
-              <span className="map-label">Data plane</span>
-              {dataPlane.map((surface) => (
-                <div className="surface-node" key={surface.label}>
-                  <strong>{surface.label}</strong>
-                  <small>{surface.detail}</small>
-                </div>
-              ))}
-            </div>
-          </section>
         </section>
       </main>
     </div>

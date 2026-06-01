@@ -132,8 +132,7 @@ small {
 }
 
 .sidebar-footer span,
-.metric span,
-.map-label {
+.metric span {
   color: #77777f;
   font-size: 11px;
   font-weight: 700;
@@ -237,9 +236,7 @@ small {
 }
 
 .setup-panel,
-.metric,
-.surface-node,
-.service-core {
+.metric {
   border: 1px solid #252529;
   border-radius: 8px;
   background: #0b0b0d;
@@ -320,69 +317,6 @@ small {
   line-height: 0.9;
 }
 
-.surface-map {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 220px minmax(0, 1fr);
-  gap: 24px;
-  align-items: center;
-  border-top: 1px solid #1c1c1f;
-  padding-top: 34px;
-}
-
-.map-column {
-  display: grid;
-  gap: 10px;
-}
-
-.surface-node {
-  display: grid;
-  gap: 6px;
-  min-height: 70px;
-  padding: 14px;
-}
-
-.surface-node strong,
-.service-core strong {
-  color: #f5f5f7;
-  font-size: 14px;
-  font-weight: 680;
-}
-
-.service-core {
-  position: relative;
-  display: grid;
-  min-height: 150px;
-  place-items: center;
-  gap: 6px;
-  padding: 18px;
-  text-align: center;
-}
-
-.service-core::before,
-.service-core::after {
-  position: absolute;
-  top: 50%;
-  width: 24px;
-  height: 1px;
-  background: #3a3a40;
-  content: "";
-}
-
-.service-core::before {
-  right: 100%;
-}
-
-.service-core::after {
-  left: 100%;
-}
-
-.service-core span {
-  color: #77777f;
-  font-size: 11px;
-  font-weight: 720;
-  text-transform: uppercase;
-}
-
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -412,14 +346,8 @@ small {
     width: 100%;
   }
 
-  .hero,
-  .surface-map {
+  .hero {
     grid-template-columns: 1fr;
-  }
-
-  .service-core::before,
-  .service-core::after {
-    display: none;
   }
 }
 
