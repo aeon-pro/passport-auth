@@ -17,8 +17,8 @@ Passport Auth is a deploy-per-app authentication service. The V1 target is a Fas
 apps/
   api/        FastAPI application and backend tests
   web/        React dashboard and hosted auth screens
-infra/
-  docker/     Docker and local infrastructure configuration
+Dockerfile   Production web image
+compose.yaml Local and Coolify Compose stack
 docs/
   passport-auth-v1-plan.md
 ```

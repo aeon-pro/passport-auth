@@ -4,7 +4,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: infra/docker/web.Dockerfile
+      dockerfile: Dockerfile
     environment:
       - APP_ENV=production
       - WEB_STATIC_DIR=/app/static
