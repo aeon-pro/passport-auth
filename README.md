@@ -50,19 +50,20 @@ npm run build
 
 ```bash
 cp .env.example .env
-docker compose up --build
+docker compose --profile local up --build
 ```
 
-The public service is exposed on `http://localhost:8000` by default. Postgres, Redis, and ClickHouse are internal Compose services.
+The public service is exposed on `http://localhost:8000` by default. The `local` profile starts local Postgres and ClickHouse services; Redis runs as part of the default stack.
 
 ### Coolify
 
 Use `compose.yaml` as the Docker Compose file. Coolify detects the interpolated variables in the Compose file and adds them to the resource Environment Variables UI.
 
-Production secrets have local fallbacks for Docker Compose, but Coolify can generate values for:
+For production, set complete connection URLs instead of separate database username/password variables:
 
-- `SERVICE_BASE64_64_APP_ENCRYPTION_KEY`
-- `SERVICE_PASSWORD_POSTGRES`
-- `SERVICE_PASSWORD_CLICKHOUSE`
+- `DATABASE_URL`
+- `CLICKHOUSE_URL`
+- `REDIS_URL`, unless you use the included Redis service
+- `APP_ENCRYPTION_KEY`
 
 The exposed web service still listens on container port `8000`.

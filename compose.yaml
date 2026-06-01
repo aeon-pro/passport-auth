@@ -6,29 +6,25 @@ services:
       context: .
       dockerfile: infra/docker/web.Dockerfile
     environment:
-      - APP_ENV=${APP_ENV:-production}
-      - WEB_PORT=${WEB_PORT:-8000}
-      - WEB_STATIC_DIR=${WEB_STATIC_DIR:-/app/static}
-      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:-${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-replace-with-a-32-byte-minimum-secret}}
-      - DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://${POSTGRES_USER:-passport}:${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_POSTGRES:-passport}}@postgres:5432/${POSTGRES_DB:-passport_auth}}
+      - APP_ENV=production
+      - WEB_STATIC_DIR=/app/static
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:?}
+      - DATABASE_URL=${DATABASE_URL:?}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://${CLICKHOUSE_USER:-passport}:${CLICKHOUSE_PASSWORD:-${SERVICE_PASSWORD_CLICKHOUSE:-passport}}@clickhouse:8123}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:?}
     ports:
-      - "${WEB_PORT:-8000}:8000"
+      - "8000:8000"
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
-        condition: service_healthy
-      clickhouse:
         condition: service_healthy
 
   postgres:
     image: postgres:17-alpine
+    profiles: ["local"]
     environment:
-      - POSTGRES_DB=${POSTGRES_DB:-passport_auth}
-      - POSTGRES_USER=${POSTGRES_USER:-passport}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_POSTGRES:-passport}}
+      POSTGRES_DB: passport_auth
+      POSTGRES_USER: passport
+      POSTGRES_PASSWORD: passport
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -50,11 +46,12 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.3
+    profiles: ["local"]
     environment:
-      - CLICKHOUSE_DB=${CLICKHOUSE_DB:-passport_auth}
-      - CLICKHOUSE_USER=${CLICKHOUSE_USER:-passport}
-      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-${SERVICE_PASSWORD_CLICKHOUSE:-passport}}
-      - CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT=1
+      CLICKHOUSE_DB: passport_auth
+      CLICKHOUSE_USER: passport
+      CLICKHOUSE_PASSWORD: passport
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     volumes:
       - clickhouse-data:/var/lib/clickhouse
     healthcheck:
