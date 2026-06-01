@@ -54,3 +54,15 @@ docker compose up --build
 ```
 
 The public service is exposed on `http://localhost:8000` by default. Postgres, Redis, and ClickHouse are internal Compose services.
+
+### Coolify
+
+Use `compose.yaml` as the Docker Compose file. Coolify detects the interpolated variables in the Compose file and adds them to the resource Environment Variables UI.
+
+Production secrets have local fallbacks for Docker Compose, but Coolify can generate values for:
+
+- `SERVICE_BASE64_64_APP_ENCRYPTION_KEY`
+- `SERVICE_PASSWORD_POSTGRES`
+- `SERVICE_PASSWORD_CLICKHOUSE`
+
+The exposed web service still listens on container port `8000`.
