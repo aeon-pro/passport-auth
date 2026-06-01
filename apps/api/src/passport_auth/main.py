@@ -17,6 +17,7 @@ def create_app(
     app = FastAPI(title="Passport Auth API")
 
     resolved_settings = settings or get_settings()
+    app.state.settings = resolved_settings
     app.state.setup_store = setup_store or create_setup_store(resolved_settings.database_url)
     app.include_router(api_v1_router)
 

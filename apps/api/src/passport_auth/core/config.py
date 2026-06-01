@@ -6,7 +6,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     app_env: str = "local"
+    app_encryption_key: str = "local-development-secret-change-me"
     database_url: str | None = None
+    dashboard_jwt_ttl_seconds: int = 3600
     web_static_dir: Path | None = None
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

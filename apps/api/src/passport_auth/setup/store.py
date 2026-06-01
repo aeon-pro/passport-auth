@@ -14,10 +14,13 @@ class SetupAlreadyCompleteError(Exception):
 class OwnerAccount:
     email: str
     password_hash: str
+    role: str = "owner"
 
 
 class SetupStore(Protocol):
     def get_owner(self) -> OwnerAccount | None: ...
+
+    def get_owner_by_email(self, email: str) -> OwnerAccount | None: ...
 
     def create_owner(self, *, email: str, password: str) -> OwnerAccount: ...
 
@@ -29,11 +32,16 @@ class InMemorySetupStore:
     def get_owner(self) -> OwnerAccount | None:
         return self.owner
 
+    def get_owner_by_email(self, email: str) -> OwnerAccount | None:
+        if self.owner and self.owner.email == email:
+            return self.owner
+        return None
+
     def create_owner(self, *, email: str, password: str) -> OwnerAccount:
         if self.owner:
             raise SetupAlreadyCompleteError
 
-        self.owner = OwnerAccount(email=email, password_hash=hash_password(password))
+        self.owner = OwnerAccount(email=email, password_hash=hash_password(password), role="owner")
         return self.owner
 
 
@@ -49,7 +57,7 @@ class PostgresSetupStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT email, password_hash
+                SELECT email, password_hash, role
                 FROM app_users
                 WHERE role = 'owner'
                 ORDER BY created_at ASC
@@ -60,7 +68,26 @@ class PostgresSetupStore:
         if not row:
             return None
 
-        return OwnerAccount(email=row[0], password_hash=row[1])
+        return OwnerAccount(email=row[0], password_hash=row[1], role=row[2])
+
+    def get_owner_by_email(self, email: str) -> OwnerAccount | None:
+        self._ensure_schema()
+
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT email, password_hash, role
+                FROM app_users
+                WHERE email = %s AND role = 'owner'
+                LIMIT 1
+                """,
+                (email,),
+            ).fetchone()
+
+        if not row:
+            return None
+
+        return OwnerAccount(email=row[0], password_hash=row[1], role=row[2])
 
     def create_owner(self, *, email: str, password: str) -> OwnerAccount:
         self._ensure_schema()
@@ -68,7 +95,7 @@ class PostgresSetupStore:
         if existing_owner:
             raise SetupAlreadyCompleteError
 
-        owner = OwnerAccount(email=email, password_hash=hash_password(password))
+        owner = OwnerAccount(email=email, password_hash=hash_password(password), role="owner")
         user_id = str(uuid4())
 
         try:
