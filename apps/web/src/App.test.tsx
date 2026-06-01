@@ -6,6 +6,10 @@ beforeEach(() => {
   window.history.pushState({}, "", "/");
 });
 
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
 test("renders the dashboard shell with primary sections", () => {
   render(<App />);
 
@@ -35,8 +39,18 @@ test("renders the setup form on the setup route", () => {
   expect(screen.getByRole("button", { name: "Create owner account" })).toBeInTheDocument();
 });
 
-test("creates the owner account locally and advances setup", () => {
+test("creates the owner account through the setup API and advances setup", async () => {
   window.history.pushState({}, "", "/setup");
+  const fetchMock = vi.fn(async () => {
+    return new Response(
+      JSON.stringify({
+        setup_complete: true,
+        owner: { email: "owner@example.com" },
+      }),
+      { headers: { "Content-Type": "application/json" }, status: 201 },
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
 
   render(<App />);
 
@@ -51,7 +65,15 @@ test("creates the owner account locally and advances setup", () => {
   });
   fireEvent.click(screen.getByRole("button", { name: "Create owner account" }));
 
-  expect(screen.getByRole("heading", { name: "Owner account created" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", { name: "Owner account created" })).toBeInTheDocument();
   expect(screen.getByText("owner@example.com")).toBeInTheDocument();
   expect(screen.getByText("Email delivery can be configured later in Settings.")).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith("/api/v1/setup/owner", {
+    body: JSON.stringify({
+      email: "owner@example.com",
+      password: "correct-horse-battery-staple",
+    }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
 });

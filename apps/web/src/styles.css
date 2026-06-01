@@ -294,6 +294,11 @@ small {
   outline: none;
 }
 
+.primary-action:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));

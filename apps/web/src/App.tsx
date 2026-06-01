@@ -1,11 +1,40 @@
 import { type FormEvent, useState } from "react";
 
+type OwnerSetupResponse = {
+  owner: {
+    email: string;
+  };
+};
+
+async function createOwnerAccount(email: string, password: string): Promise<{ email: string }> {
+  const response = await fetch("/api/v1/setup/owner", {
+    body: JSON.stringify({ email, password }),
+    headers: { "Content-Type": "application/json" },
+    method: "POST",
+  });
+
+  const responseBody = (await response.json().catch(() => null)) as
+    | (Partial<OwnerSetupResponse> & { detail?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(responseBody?.detail ?? "Could not create owner account.");
+  }
+
+  if (!responseBody?.owner?.email) {
+    throw new Error("Setup API returned an invalid response.");
+  }
+
+  return responseBody.owner;
+}
+
 export function App() {
   const currentPath = typeof window === "undefined" ? "/" : window.location.pathname;
   const activePath = currentPath === "/" ? "/setup" : currentPath;
   const isSetupRoute = currentPath === "/setup";
   const [ownerAccount, setOwnerAccount] = useState<{ email: string } | null>(null);
   const [setupError, setSetupError] = useState("");
+  const [isSubmittingSetup, setIsSubmittingSetup] = useState(false);
   const sections = [
     { label: "Setup", href: "/setup" },
     { label: "Users", href: "/users" },
@@ -19,7 +48,7 @@ export function App() {
     { label: "API keys", value: "0", detail: "Service access" },
     { label: "Events", value: "0", detail: "Last 24 hours" },
   ];
-  const handleOwnerSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleOwnerSetupSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
@@ -43,7 +72,16 @@ export function App() {
     }
 
     setSetupError("");
-    setOwnerAccount({ email: ownerEmail });
+    setIsSubmittingSetup(true);
+
+    try {
+      const owner = await createOwnerAccount(ownerEmail, password);
+      setOwnerAccount({ email: owner.email });
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : "Could not create owner account.");
+    } finally {
+      setIsSubmittingSetup(false);
+    }
   };
 
   return (
@@ -165,8 +203,8 @@ export function App() {
                   ) : null}
 
                   <div className="form-actions">
-                    <button className="primary-action" type="submit">
-                      Create owner account
+                    <button className="primary-action" disabled={isSubmittingSetup} type="submit">
+                      {isSubmittingSetup ? "Creating owner..." : "Create owner account"}
                     </button>
                     <a className="secondary-action" href="/">
                       Back to overview
