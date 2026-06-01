@@ -1,12 +1,31 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 
-type OwnerSetupResponse = {
-  owner: {
-    email: string;
-  };
+type OwnerAccount = {
+  email: string;
 };
 
-async function createOwnerAccount(email: string, password: string): Promise<{ email: string }> {
+type SetupStatusResponse = {
+  setup_complete: boolean;
+  owner: OwnerAccount | null;
+};
+
+async function readSetupStatus(): Promise<SetupStatusResponse> {
+  const response = await fetch("/api/v1/setup/status");
+  const responseBody = (await response.json().catch(() => null)) as
+    | (Partial<SetupStatusResponse> & { detail?: string })
+    | null;
+
+  if (!response.ok) {
+    throw new Error(responseBody?.detail ?? "Could not load setup status.");
+  }
+
+  return {
+    setup_complete: Boolean(responseBody?.setup_complete),
+    owner: responseBody?.owner?.email ? { email: responseBody.owner.email } : null,
+  };
+}
+
+async function createOwnerAccount(email: string, password: string): Promise<OwnerAccount> {
   const response = await fetch("/api/v1/setup/owner", {
     body: JSON.stringify({ email, password }),
     headers: { "Content-Type": "application/json" },
@@ -14,7 +33,7 @@ async function createOwnerAccount(email: string, password: string): Promise<{ em
   });
 
   const responseBody = (await response.json().catch(() => null)) as
-    | (Partial<OwnerSetupResponse> & { detail?: string })
+    | (Partial<SetupStatusResponse> & { detail?: string })
     | null;
 
   if (!response.ok) {
@@ -48,6 +67,28 @@ export function App() {
     { label: "API keys", value: "0", detail: "Service access" },
     { label: "Events", value: "0", detail: "Last 24 hours" },
   ];
+
+  useEffect(() => {
+    if (!isSetupRoute) {
+      return;
+    }
+
+    let isCurrent = true;
+
+    void readSetupStatus()
+      .then((status) => {
+        if (isCurrent && status.setup_complete && status.owner) {
+          setSetupError("");
+          setOwnerAccount(status.owner);
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [isSetupRoute]);
+
   const handleOwnerSetupSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
