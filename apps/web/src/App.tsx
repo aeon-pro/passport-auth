@@ -1,7 +1,11 @@
+import { type FormEvent, useState } from "react";
+
 export function App() {
   const currentPath = typeof window === "undefined" ? "/" : window.location.pathname;
   const activePath = currentPath === "/" ? "/setup" : currentPath;
   const isSetupRoute = currentPath === "/setup";
+  const [ownerAccount, setOwnerAccount] = useState<{ email: string } | null>(null);
+  const [setupError, setSetupError] = useState("");
   const sections = [
     { label: "Setup", href: "/setup" },
     { label: "Users", href: "/users" },
@@ -15,6 +19,32 @@ export function App() {
     { label: "API keys", value: "0", detail: "Service access" },
     { label: "Events", value: "0", detail: "Last 24 hours" },
   ];
+  const handleOwnerSetupSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const ownerEmail = String(formData.get("ownerEmail") ?? "").trim();
+    const password = String(formData.get("password") ?? "");
+    const confirmPassword = String(formData.get("confirmPassword") ?? "");
+
+    if (!ownerEmail || !password || !confirmPassword) {
+      setSetupError("Enter an owner email and password to continue.");
+      return;
+    }
+
+    if (password.length < 12) {
+      setSetupError("Use a password with at least 12 characters.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setSetupError("Passwords do not match.");
+      return;
+    }
+
+    setSetupError("");
+    setOwnerAccount({ email: ownerEmail });
+  };
 
   return (
     <div className="app-shell">
@@ -63,41 +93,87 @@ export function App() {
               <div className="page-heading">
                 <span className="eyebrow">Setup</span>
                 <h2>Setup Passport Auth</h2>
-                <p>Configure the first owner, public domains, and redirect URL before enabling auth.</p>
+                <p>Create the first owner account. Domains, OAuth, and email delivery can be configured later.</p>
               </div>
 
-              <form className="setup-form" aria-label="Setup Passport Auth">
-                <div className="form-grid">
-                  <label className="field">
-                    <span>Owner email</span>
-                    <input autoComplete="email" name="ownerEmail" placeholder="owner@example.com" type="email" />
-                  </label>
+              {ownerAccount ? (
+                <section className="setup-form setup-success" aria-label="Owner account created">
+                  <div className="panel-heading">
+                    <span className="eyebrow">Owner account</span>
+                    <h3>Owner account created</h3>
+                  </div>
 
-                  <label className="field">
-                    <span>Application domain</span>
-                    <input name="applicationDomain" placeholder="app.example.com" type="text" />
-                  </label>
+                  <div className="owner-summary">
+                    <span>Email</span>
+                    <strong>{ownerAccount.email}</strong>
+                  </div>
 
-                  <label className="field">
-                    <span>Auth domain</span>
-                    <input name="authDomain" placeholder="auth.example.com" type="text" />
-                  </label>
+                  <p>Email delivery can be configured later in Settings.</p>
 
-                  <label className="field">
-                    <span>Allowed redirect URL</span>
-                    <input name="redirectUrl" placeholder="https://app.example.com/auth/callback" type="url" />
-                  </label>
-                </div>
+                  <div className="form-actions">
+                    <a className="primary-action" href="/settings">
+                      Continue to settings
+                    </a>
+                    <a className="secondary-action" href="/">
+                      Back to overview
+                    </a>
+                  </div>
+                </section>
+              ) : (
+                <form className="setup-form" aria-label="Setup Passport Auth" onSubmit={handleOwnerSetupSubmit}>
+                  <div className="form-grid owner-form-grid">
+                    <label className="field">
+                      <span>Owner email</span>
+                      <input
+                        autoComplete="email"
+                        name="ownerEmail"
+                        placeholder="owner@example.com"
+                        required
+                        type="email"
+                      />
+                    </label>
 
-                <div className="form-actions">
-                  <button className="primary-action" type="button">
-                    Continue setup
-                  </button>
-                  <a className="secondary-action" href="/">
-                    Back to overview
-                  </a>
-                </div>
-              </form>
+                    <label className="field">
+                      <span>Password</span>
+                      <input
+                        autoComplete="new-password"
+                        minLength={12}
+                        name="password"
+                        placeholder="Minimum 12 characters"
+                        required
+                        type="password"
+                      />
+                    </label>
+
+                    <label className="field">
+                      <span>Confirm password</span>
+                      <input
+                        autoComplete="new-password"
+                        minLength={12}
+                        name="confirmPassword"
+                        placeholder="Repeat password"
+                        required
+                        type="password"
+                      />
+                    </label>
+                  </div>
+
+                  {setupError ? (
+                    <p className="form-error" role="alert">
+                      {setupError}
+                    </p>
+                  ) : null}
+
+                  <div className="form-actions">
+                    <button className="primary-action" type="submit">
+                      Create owner account
+                    </button>
+                    <a className="secondary-action" href="/">
+                      Back to overview
+                    </a>
+                  </div>
+                </form>
+              )}
             </div>
           ) : (
             <>

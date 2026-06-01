@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 import { App } from "./App";
 
@@ -29,8 +29,29 @@ test("renders the setup form on the setup route", () => {
 
   expect(screen.getByRole("heading", { name: "Setup Passport Auth" })).toBeInTheDocument();
   expect(screen.getByLabelText("Owner email")).toBeInTheDocument();
-  expect(screen.getByLabelText("Application domain")).toBeInTheDocument();
-  expect(screen.getByLabelText("Auth domain")).toBeInTheDocument();
-  expect(screen.getByLabelText("Allowed redirect URL")).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "Continue setup" })).toBeInTheDocument();
+  expect(screen.getByLabelText("Password")).toBeInTheDocument();
+  expect(screen.getByLabelText("Confirm password")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Application domain")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Create owner account" })).toBeInTheDocument();
+});
+
+test("creates the owner account locally and advances setup", () => {
+  window.history.pushState({}, "", "/setup");
+
+  render(<App />);
+
+  fireEvent.change(screen.getByLabelText("Owner email"), {
+    target: { value: "owner@example.com" },
+  });
+  fireEvent.change(screen.getByLabelText("Password"), {
+    target: { value: "correct-horse-battery-staple" },
+  });
+  fireEvent.change(screen.getByLabelText("Confirm password"), {
+    target: { value: "correct-horse-battery-staple" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Create owner account" }));
+
+  expect(screen.getByRole("heading", { name: "Owner account created" })).toBeInTheDocument();
+  expect(screen.getByText("owner@example.com")).toBeInTheDocument();
+  expect(screen.getByText("Email delivery can be configured later in Settings.")).toBeInTheDocument();
 });

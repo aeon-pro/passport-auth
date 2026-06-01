@@ -66,6 +66,7 @@ a {
 
 h1,
 h2,
+h3,
 p {
   margin: 0;
 }
@@ -84,6 +85,13 @@ h2 {
   font-size: 56px;
   font-weight: 650;
   line-height: 0.95;
+}
+
+h3 {
+  color: #ffffff;
+  font-size: 28px;
+  font-weight: 620;
+  line-height: 1.05;
 }
 
 p {
@@ -325,6 +333,11 @@ small {
   gap: 16px;
 }
 
+.owner-form-grid {
+  grid-template-columns: 1fr;
+  max-width: 520px;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -353,10 +366,43 @@ small {
   outline: none;
 }
 
+.form-error {
+  max-width: none;
+  margin: 0;
+  color: #ff9c9c;
+  font-size: 13px;
+}
+
 .form-actions {
   display: flex;
   align-items: center;
   gap: 14px;
+}
+
+.setup-success {
+  max-width: 560px;
+}
+
+.owner-summary {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #242429;
+  border-radius: 8px;
+  background: #050506;
+  padding: 16px;
+}
+
+.owner-summary span {
+  color: #77777f;
+  font-size: 11px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.owner-summary strong {
+  color: #f5f5f7;
+  font-size: 15px;
+  font-weight: 600;
 }
 
 .secondary-action {
