@@ -41,6 +41,34 @@ class EmailTemplate:
     support_url: str
 
 
+TEMPLATE_COLOR_PRESETS = (
+    "#f5f5f7",
+    "#7cffaa",
+    "#b8f3ff",
+    "#ffd27a",
+    "#ff9fb2",
+    "#c7b7ff",
+)
+DEFAULT_TEMPLATE_COLOR = TEMPLATE_COLOR_PRESETS[0]
+
+
+def normalize_template_accent_color(value: object) -> str:
+    color = str(value or "").strip().lower()
+    if color in TEMPLATE_COLOR_PRESETS:
+        return color
+    if not _is_hex_color(color):
+        return DEFAULT_TEMPLATE_COLOR
+
+    target = _hex_to_rgb(color)
+    return min(
+        TEMPLATE_COLOR_PRESETS,
+        key=lambda preset: sum(
+            (channel - preset_channel) ** 2
+            for channel, preset_channel in zip(target, _hex_to_rgb(preset), strict=True)
+        ),
+    )
+
+
 DEFAULT_EMAIL_TEMPLATES = (
     EmailTemplate(
         key="magic_link",
@@ -49,7 +77,7 @@ DEFAULT_EMAIL_TEMPLATES = (
         headline="Your sign-in link is ready",
         body="Use the secure link below to finish signing in. The link expires soon.",
         button_label="Open magic link",
-        accent_color="#f5f5f7",
+        accent_color=DEFAULT_TEMPLATE_COLOR,
         footer_text="If you did not request this sign-in link, you can safely ignore this email.",
         support_label="Contact support",
         support_url="mailto:support@example.com",
@@ -61,7 +89,7 @@ DEFAULT_EMAIL_TEMPLATES = (
         headline="Your verification code",
         body="Enter {{code}} to continue. This code expires soon.",
         button_label="Use this code",
-        accent_color="#f5f5f7",
+        accent_color=DEFAULT_TEMPLATE_COLOR,
         footer_text="If you did not request this code, you can safely ignore this email.",
         support_label="Contact support",
         support_url="mailto:support@example.com",
@@ -76,7 +104,7 @@ DEFAULT_EMAIL_TEMPLATES = (
             "Ignore this email if you did not request it."
         ),
         button_label="Reset password",
-        accent_color="#f5f5f7",
+        accent_color=DEFAULT_TEMPLATE_COLOR,
         footer_text="If you did not request this password reset, contact support immediately.",
         support_label="Contact support",
         support_url="mailto:support@example.com",
@@ -175,8 +203,9 @@ class InMemorySetupStore:
         return self.dashboard_settings
 
     def save_dashboard_settings(self, settings: DashboardSettings) -> DashboardSettings:
-        self.dashboard_settings = settings
-        return settings
+        normalized_settings = dashboard_settings_from_dict(dashboard_settings_to_dict(settings))
+        self.dashboard_settings = normalized_settings
+        return normalized_settings
 
 
 class PostgresSetupStore:
@@ -333,8 +362,12 @@ class PostgresSetupStore:
 
     def save_dashboard_settings(self, settings: DashboardSettings) -> DashboardSettings:
         self._ensure_schema()
+        normalized_settings = dashboard_settings_from_dict(dashboard_settings_to_dict(settings))
         settings_json = json.dumps(
-            dashboard_settings_to_storage_dict(settings, encryption_key=self.encryption_key)
+            dashboard_settings_to_storage_dict(
+                normalized_settings,
+                encryption_key=self.encryption_key,
+            )
         )
 
         with self._connect() as conn:
@@ -350,7 +383,7 @@ class PostgresSetupStore:
                     (settings_json,),
                 )
 
-        return settings
+        return normalized_settings
 
     def _ensure_schema(self) -> None:
         if self._schema_ready:
@@ -495,7 +528,7 @@ def _email_templates_tuple(value: object) -> tuple[EmailTemplate, ...]:
                 headline="",
                 body="",
                 button_label="",
-                accent_color="#f5f5f7",
+                accent_color=DEFAULT_TEMPLATE_COLOR,
                 footer_text="If you did not request this email, you can safely ignore it.",
                 support_label="Contact support",
                 support_url="mailto:support@example.com",
@@ -512,9 +545,8 @@ def _email_templates_tuple(value: object) -> tuple[EmailTemplate, ...]:
                     item.get("button_label"),
                     fallback.button_label,
                 ),
-                accent_color=_clean_template_value(
-                    item.get("accent_color"),
-                    fallback.accent_color,
+                accent_color=normalize_template_accent_color(
+                    _clean_template_value(item.get("accent_color"), fallback.accent_color),
                 ),
                 footer_text=_clean_template_value(
                     item.get("footer_text"),
@@ -545,6 +577,22 @@ def _clean_template_value(value: object, default: str) -> str:
 
     cleaned = str(value).strip()
     return cleaned or default
+
+
+def _is_hex_color(color: str) -> bool:
+    return (
+        len(color) == 7
+        and color.startswith("#")
+        and all(character in "0123456789abcdef" for character in color[1:])
+    )
+
+
+def _hex_to_rgb(color: str) -> tuple[int, int, int]:
+    return (
+        int(color[1:3], 16),
+        int(color[3:5], 16),
+        int(color[5:7], 16),
+    )
 
 
 def dashboard_settings_to_storage_dict(

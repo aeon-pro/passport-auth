@@ -239,7 +239,7 @@ async def test_dashboard_settings_save_email_templates() -> None:
             "headline": "Your secure link",
             "body": "Tap below to continue into {{brand_name}}.",
             "button_label": "Continue",
-            "accent_color": "#7cffaa",
+            "accent_color": "#0800f4",
             "footer_text": "If you did not request this link, you can ignore this email.",
             "support_label": "Contact support",
             "support_url": "mailto:support@alactic.net",
@@ -251,7 +251,7 @@ async def test_dashboard_settings_save_email_templates() -> None:
             "headline": "Use this code",
             "body": "Your one-time code is {{code}}.",
             "button_label": "Copy code",
-            "accent_color": "#b8f3ff",
+            "accent_color": "#123456",
             "footer_text": "If this was not you, no action is required.",
             "support_label": "Contact support",
             "support_url": "https://alactic.net/support",
@@ -263,11 +263,16 @@ async def test_dashboard_settings_save_email_templates() -> None:
             "headline": "Reset requested",
             "body": "Use {{code}} to reset the dashboard password.",
             "button_label": "Reset",
-            "accent_color": "#ffd27a",
+            "accent_color": "not-a-color",
             "footer_text": "If you did not request a reset, contact us immediately.",
             "support_label": "Contact us",
             "support_url": "mailto:security@alactic.net",
         },
+    ]
+    expected_templates = [
+        {**templates[0], "accent_color": "#c7b7ff"},
+        {**templates[1], "accent_color": "#7cffaa"},
+        {**templates[2], "accent_color": "#f5f5f7"},
     ]
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
@@ -281,8 +286,8 @@ async def test_dashboard_settings_save_email_templates() -> None:
         read_response = await client.get("/api/v1/dashboard/settings", headers=headers)
 
     assert save_response.status_code == 200
-    assert save_response.json()["email_templates"] == templates
-    assert read_response.json()["email_templates"] == templates
+    assert save_response.json()["email_templates"] == expected_templates
+    assert read_response.json()["email_templates"] == expected_templates
 
 
 @pytest.mark.asyncio

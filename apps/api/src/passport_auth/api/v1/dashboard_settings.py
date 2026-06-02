@@ -5,7 +5,13 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 
 from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user, get_setup_store
-from passport_auth.setup.store import DashboardSettings, EmailTemplate, OwnerAccount, SetupStore
+from passport_auth.setup.store import (
+    DashboardSettings,
+    EmailTemplate,
+    OwnerAccount,
+    SetupStore,
+    normalize_template_accent_color,
+)
 
 router = APIRouter(prefix="/dashboard/settings", tags=["dashboard-settings"])
 
@@ -160,7 +166,13 @@ def update_dashboard_settings(
         updates["redirect_urls"] = tuple(updates["redirect_urls"])
     if "email_templates" in updates:
         updates["email_templates"] = tuple(
-            EmailTemplate(**template) for template in updates["email_templates"]
+            EmailTemplate(
+                **{
+                    **template,
+                    "accent_color": normalize_template_accent_color(template["accent_color"]),
+                }
+            )
+            for template in updates["email_templates"]
         )
     if updates.get("resend_api_key") == "":
         updates.pop("resend_api_key")

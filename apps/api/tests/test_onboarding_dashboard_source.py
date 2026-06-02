@@ -20,7 +20,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-02-template-polish" in index_html
+    assert "2026-06-02-template-presets" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -47,6 +47,20 @@ def test_branding_settings_include_color_picker() -> None:
     assert "data-color-picker" in app_js
     assert "data-color-text" in app_js
     assert "color-field" in styles_css
+
+
+def test_template_color_picker_uses_native_presets_and_shared_theme() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "templateColorPresets" in app_js
+    assert 'list="template-color-presets"' in app_js
+    assert 'id="template-color-presets"' in app_js
+    assert "data-color-preset" in app_js
+    assert "closestPresetColor" in app_js
+    assert "color-preset-grid" in styles_css
+    assert "color-preset-swatch" in styles_css
+    assert "--email-surface" in styles_css
 
 
 def test_completed_setup_route_is_removed_from_signed_in_dashboard() -> None:

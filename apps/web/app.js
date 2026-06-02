@@ -1,5 +1,14 @@
 const TOKEN_KEY = "passport-auth-token";
 const app = document.querySelector("#app");
+const defaultTemplateColor = "#f5f5f7";
+const templateColorPresets = [
+  defaultTemplateColor,
+  "#7cffaa",
+  "#b8f3ff",
+  "#ffd27a",
+  "#ff9fb2",
+  "#c7b7ff",
+];
 
 const defaultEmailTemplates = [
   {
@@ -9,7 +18,7 @@ const defaultEmailTemplates = [
     headline: "Your sign-in link is ready",
     body: "Use the secure link below to finish signing in. The link expires soon.",
     button_label: "Open magic link",
-    accent_color: "#f5f5f7",
+    accent_color: defaultTemplateColor,
     footer_text: "If you did not request this sign-in link, you can safely ignore this email.",
     support_label: "Contact support",
     support_url: "mailto:support@example.com",
@@ -21,7 +30,7 @@ const defaultEmailTemplates = [
     headline: "Your verification code",
     body: "Enter {{code}} to continue. This code expires soon.",
     button_label: "Use this code",
-    accent_color: "#f5f5f7",
+    accent_color: defaultTemplateColor,
     footer_text: "If you did not request this code, you can safely ignore this email.",
     support_label: "Contact support",
     support_url: "mailto:support@example.com",
@@ -34,7 +43,7 @@ const defaultEmailTemplates = [
     body:
       "Enter {{code}} to reset your dashboard password. Ignore this email if you did not request it.",
     button_label: "Reset password",
-    accent_color: "#f5f5f7",
+    accent_color: defaultTemplateColor,
     footer_text: "If you did not request this password reset, contact support immediately.",
     support_label: "Contact support",
     support_url: "mailto:support@example.com",
@@ -59,7 +68,7 @@ const defaultOnboarding = {
   google_client_id: "",
   google_client_secret: "",
   brand_name: "Passport Auth",
-  primary_color: "#f5f5f7",
+  primary_color: defaultTemplateColor,
   email_templates: cloneEmailTemplates(),
 };
 
@@ -228,8 +237,38 @@ function ensureOrigin(domain) {
 }
 
 function normalizeHexColor(value) {
-  const color = String(value || "").trim();
-  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#f5f5f7";
+  const color = String(value || "").trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(color) ? color : defaultTemplateColor;
+}
+
+function hexToRgb(color) {
+  return [1, 3, 5].map((start) => Number.parseInt(color.slice(start, start + 2), 16));
+}
+
+function closestPresetColor(value) {
+  const color = normalizeHexColor(value);
+  if (templateColorPresets.includes(color)) {
+    return color;
+  }
+
+  const target = hexToRgb(color);
+  return templateColorPresets.reduce((closest, preset) => {
+    const presetRgb = hexToRgb(preset);
+    const closestRgb = hexToRgb(closest);
+    const presetDistance = target.reduce(
+      (total, channel, index) => total + (channel - presetRgb[index]) ** 2,
+      0,
+    );
+    const closestDistance = target.reduce(
+      (total, channel, index) => total + (channel - closestRgb[index]) ** 2,
+      0,
+    );
+    return presetDistance < closestDistance ? preset : closest;
+  }, defaultTemplateColor);
+}
+
+function normalizePresetColor(value) {
+  return closestPresetColor(value);
 }
 
 function cloneEmailTemplates(templates = defaultEmailTemplates) {
@@ -238,10 +277,16 @@ function cloneEmailTemplates(templates = defaultEmailTemplates) {
 
 function normalizeEmailTemplates(templates) {
   const templatesByKey = new Map((templates || []).map((template) => [template.key, template]));
-  return defaultEmailTemplates.map((defaultTemplate) => ({
-    ...defaultTemplate,
-    ...(templatesByKey.get(defaultTemplate.key) || {}),
-  }));
+  return defaultEmailTemplates.map((defaultTemplate) => {
+    const template = {
+      ...defaultTemplate,
+      ...(templatesByKey.get(defaultTemplate.key) || {}),
+    };
+    return {
+      ...template,
+      accent_color: normalizePresetColor(template.accent_color),
+    };
+  });
 }
 
 function sampleTemplateText(value, brandName = "Passport Auth") {
@@ -272,9 +317,10 @@ function readEmailTemplatesFromForm(form) {
     button_label:
       String(formData.get(`email_templates.${index}.button_label`) || "").trim() ||
       defaultTemplate.button_label,
-    accent_color:
+    accent_color: normalizePresetColor(
       String(formData.get(`email_templates.${index}.accent_color`) || "").trim() ||
-      defaultTemplate.accent_color,
+        defaultTemplate.accent_color,
+    ),
     footer_text:
       String(formData.get(`email_templates.${index}.footer_text`) || "").trim() ||
       defaultTemplate.footer_text,
@@ -720,6 +766,7 @@ function renderTemplateCards(templates, brandName) {
   const normalizedTemplates = normalizeEmailTemplates(templates);
 
   return `
+    ${renderTemplateColorDatalist()}
     <div class="template-tabs" aria-label="Email template types">
       ${normalizedTemplates
         .map(
@@ -740,8 +787,36 @@ function renderTemplateCards(templates, brandName) {
   `;
 }
 
+function renderTemplateColorDatalist() {
+  return `
+    <datalist id="template-color-presets">
+      ${templateColorPresets.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}
+    </datalist>
+  `;
+}
+
+function renderTemplateColorPresets(selectedColor) {
+  return `
+    <div class="color-preset-grid" aria-label="Preset template colors">
+      ${templateColorPresets
+        .map(
+          (color) => `
+            <button
+              class="color-preset-swatch ${color === selectedColor ? "active" : ""}"
+              type="button"
+              style="--preset-color: ${escapeHtml(color)}"
+              data-color-preset="${escapeHtml(color)}"
+              aria-label="Use ${escapeHtml(color)}"
+            ></button>
+          `,
+        )
+        .join("")}
+    </div>
+  `;
+}
+
 function renderTemplateCard(template, index, brandName) {
-  const accentColor = normalizeHexColor(template.accent_color);
+  const accentColor = normalizePresetColor(template.accent_color);
   const sampleSubject = sampleTemplateText(template.subject, brandName);
   const sampleHeadline = sampleTemplateText(template.headline, brandName);
   const sampleBody = sampleTemplateText(template.body, brandName);
@@ -811,21 +886,24 @@ function renderTemplateCard(template, index, brandName) {
             </label>
             <label class="field">
               <span>Accent color</span>
-              <div class="color-field">
+              <div class="color-field template-color-field">
                 <input
                   class="color-text"
                   name="email_templates.${index}.accent_color"
                   type="text"
-                  value="${escapeHtml(template.accent_color)}"
+                  value="${escapeHtml(accentColor)}"
                   data-color-text
                 />
                 <input
                   class="color-picker"
                   type="color"
+                  list="template-color-presets"
                   value="${escapeHtml(accentColor)}"
                   aria-label="Pick ${escapeHtml(template.name)} accent color"
                   data-color-picker
+                  data-color-mode="preset"
                 />
+                ${renderTemplateColorPresets(accentColor)}
               </div>
             </label>
           </div>
@@ -1632,6 +1710,34 @@ async function handleTemplatesSubmit(form) {
   }
 }
 
+function syncColorField(colorField, value, { presetOnly = false } = {}) {
+  const color = presetOnly ? normalizePresetColor(value) : normalizeHexColor(value);
+  const textInput = colorField?.querySelector("[data-color-text]");
+  const pickerInput = colorField?.querySelector("[data-color-picker]");
+  if (textInput) {
+    textInput.value = color;
+  }
+  if (pickerInput) {
+    pickerInput.value = color;
+  }
+
+  const templatePreview = colorField?.closest(".template-card")?.querySelector(".template-preview");
+  if (templatePreview) {
+    templatePreview.style.setProperty("--template-color", color);
+  }
+
+  const brandPreview = colorField?.closest("form")?.querySelector(".brand-preview");
+  if (brandPreview && textInput?.name === "primary_color") {
+    brandPreview.style.setProperty("--preview-color", color);
+  }
+
+  colorField?.querySelectorAll("[data-color-preset]").forEach((preset) => {
+    preset.classList.toggle("active", preset.dataset.colorPreset === color);
+  });
+
+  return color;
+}
+
 app.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.target;
@@ -1661,10 +1767,9 @@ app.addEventListener("input", (event) => {
   const picker = event.target.closest("[data-color-picker]");
   if (picker) {
     const colorField = picker.closest(".color-field");
-    const textInput = colorField?.querySelector("[data-color-text]");
-    if (textInput) {
-      textInput.value = picker.value;
-    }
+    syncColorField(colorField, picker.value, {
+      presetOnly: picker.dataset.colorMode === "preset",
+    });
     return;
   }
 
@@ -1680,12 +1785,21 @@ app.addEventListener("input", (event) => {
 
   const colorField = colorText.closest(".color-field");
   const pickerInput = colorField?.querySelector("[data-color-picker]");
-  if (pickerInput) {
-    pickerInput.value = typedColor;
-  }
+  syncColorField(colorField, typedColor, {
+    presetOnly: pickerInput?.dataset.colorMode === "preset",
+  });
 });
 
 app.addEventListener("click", (event) => {
+  const colorPreset = event.target.closest("[data-color-preset]");
+  if (colorPreset) {
+    const colorField = colorPreset.closest(".color-field");
+    syncColorField(colorField, colorPreset.dataset.colorPreset || defaultTemplateColor, {
+      presetOnly: true,
+    });
+    return;
+  }
+
   const link = event.target.closest("[data-link]");
   if (link) {
     event.preventDefault();
