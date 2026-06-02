@@ -452,7 +452,8 @@ p {
   outline: none;
 }
 
-.primary-action:disabled {
+.primary-action:disabled,
+.secondary-action:disabled {
   cursor: wait;
   opacity: 0.68;
 }
@@ -635,9 +636,28 @@ p {
   top: 90px;
 }
 
+.settings-section > :not(.section-heading) {
+  grid-column: 2;
+}
+
 .settings-section h3 {
   font-size: 25px;
   font-weight: 390;
+}
+
+.section-actions {
+  display: flex;
+  grid-column: 1 / -1;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
+.settings-section > .section-actions {
+  grid-column: 2;
+}
+
+.section-save {
+  min-width: 118px;
 }
 
 .guidance {
@@ -696,8 +716,8 @@ p {
 
 .toggle-control {
   position: relative;
-  width: 35px;
-  height: 20px;
+  width: 42px;
+  height: 24px;
   flex: 0 0 auto;
   border: 1px solid #3b3b41;
   border-radius: 999px;
@@ -706,13 +726,14 @@ p {
 
 .toggle-control::after {
   position: absolute;
-  top: 3px;
+  top: 50%;
   left: 3px;
-  width: 14px;
-  height: 14px;
+  width: 18px;
+  height: 18px;
   border-radius: 999px;
   background: #8b8b92;
   content: "";
+  transform: translateY(-50%);
   transition:
     background 160ms ease,
     transform 160ms ease;
@@ -725,7 +746,7 @@ p {
 
 .toggle-row input:checked + .toggle-control::after {
   background: var(--signal);
-  transform: translateX(15px);
+  transform: translate(18px, -50%);
 }
 
 .toggle-row:has(input:focus-visible) {
@@ -1006,6 +1027,11 @@ p {
 
   .settings-section {
     grid-template-columns: 1fr;
+  }
+
+  .settings-section > :not(.section-heading),
+  .settings-section > .section-actions {
+    grid-column: 1;
   }
 
   .settings-section .section-heading {

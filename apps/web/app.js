@@ -852,6 +852,7 @@ function renderSettings() {
               listToLines(settings.redirect_urls),
             )}</textarea>
           </label>
+          ${renderSectionSave("URLs")}
         </div>
       </section>
 
@@ -873,6 +874,7 @@ function renderSettings() {
               settings.resend_configured ? "Configured" : "re_..."
             }" />
           </label>
+          ${renderSectionSave("Resend")}
         </div>
       </section>
 
@@ -905,6 +907,7 @@ function renderSettings() {
             <code>${escapeHtml(googleRedirectUrl)}</code>
           </div>
         </div>
+        ${renderSectionSave("Google")}
       </section>
 
       <section class="settings-section">
@@ -925,6 +928,7 @@ function renderSettings() {
               settings.primary_color,
             )}" placeholder="#f5f5f7" />
           </label>
+          ${renderSectionSave("branding")}
         </div>
       </section>
 
@@ -946,17 +950,25 @@ function renderSettings() {
             )
             .join("")}
         </div>
+        ${renderSectionSave("methods")}
       </section>
 
       ${renderError()}
       ${renderMessage()}
-      <div class="form-actions sticky-actions">
-        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-          ${state.busy ? "Saving..." : "Save settings"}
-        </button>
-      </div>
     </form>
   `);
+}
+
+function renderSectionSave(label) {
+  return `
+    <div class="section-actions">
+      <button class="secondary-action section-save" type="button" data-action="save-settings" ${
+        state.busy ? "disabled" : ""
+      }>
+        ${state.busy ? "Saving..." : `Save ${label}`}
+      </button>
+    </div>
+  `;
 }
 
 function renderError() {
@@ -1349,6 +1361,12 @@ app.addEventListener("click", (event) => {
     state.onboardingStep = Math.max(0, state.onboardingStep - 1);
     state.error = "";
     render();
+  }
+  if (action === "save-settings") {
+    const form = event.target.closest("form");
+    if (form) {
+      void handleSettingsSubmit(form);
+    }
   }
 });
 

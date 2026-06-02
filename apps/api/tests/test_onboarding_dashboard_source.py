@@ -26,3 +26,14 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     assert "settings-matrix" in app_js
     assert "obsidian-grid" in styles_css
     assert "kinetic-line" in styles_css
+
+
+def test_settings_sections_have_local_save_actions_and_centered_toggles() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "renderSectionSave" in app_js
+    assert 'data-action="save-settings"' in app_js
+    assert 'renderSectionSave("URLs")' in app_js
+    assert "translateY(-50%)" in styles_css
+    assert "translate(18px, -50%)" in styles_css
