@@ -1,6 +1,27 @@
 const TOKEN_KEY = "passport-auth-token";
 const app = document.querySelector("#app");
 
+const defaultOnboarding = {
+  ownerEmail: "",
+  password: "",
+  confirmPassword: "",
+  app_domain: "",
+  auth_domain: "",
+  allowed_origins: "",
+  redirect_urls: "",
+  password_login_enabled: true,
+  otp_login_enabled: false,
+  magic_link_enabled: false,
+  google_oauth_enabled: false,
+  password_reset_otp_enabled: true,
+  resend_from_email: "",
+  resend_api_key: "",
+  google_client_id: "",
+  google_client_secret: "",
+  brand_name: "Passport Auth",
+  primary_color: "#f5f5f7",
+};
+
 const state = {
   setup: null,
   user: null,
@@ -8,6 +29,8 @@ const state = {
   settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
+  onboardingStep: 0,
+  onboarding: { ...defaultOnboarding },
   resetEmail: "",
   devOtp: "",
   message: "",
@@ -36,6 +59,86 @@ const authMethodLabels = {
   google_oauth_enabled: "Google OAuth",
   password_reset_otp_enabled: "Password reset OTP",
 };
+
+const onboardingSteps = [
+  {
+    title: "Welcome",
+    eyebrow: "Start here",
+    summary: "Set the owner account, URLs, auth methods, providers, and branding.",
+    lessonTitle: "What you are creating",
+    lessons: [
+      "One public FastAPI service serves hosted auth pages, APIs, and this dashboard.",
+      "The owner account protects the dashboard and can change these settings later.",
+      "Tokens and one-time codes stay out of redirect URLs; setup creates the safe defaults.",
+    ],
+  },
+  {
+    title: "Owner",
+    eyebrow: "Dashboard access",
+    summary: "Create the first dashboard user. This locks the first-run setup flow.",
+    lessonTitle: "Why this comes first",
+    lessons: [
+      "The owner account is the root dashboard identity.",
+      "Use a strong password; the stored value is hashed before it reaches persistence.",
+      "After this, future dashboard access goes through the JWT-backed login screen.",
+    ],
+  },
+  {
+    title: "URLs",
+    eyebrow: "Public surface",
+    summary: "Tell Passport Auth where your app lives and where browser redirects may return.",
+    lessonTitle: "Redirect safety",
+    lessons: [
+      "Allowed origins control which browser apps can call public auth endpoints.",
+      "Redirect URLs prevent auth codes from being sent to unknown destinations.",
+      "The auth domain is used to build hosted page and Google OAuth callback guidance.",
+    ],
+  },
+  {
+    title: "Methods",
+    eyebrow: "Auth options",
+    summary: "Choose the sign-in methods your app should expose on day one.",
+    lessonTitle: "Keep the surface small",
+    lessons: [
+      "Password login is the simplest baseline and stays enabled by default.",
+      "OTP and magic links require working email delivery before production use.",
+      "Google OAuth needs an authorized origin and redirect URI in Google Cloud.",
+    ],
+  },
+  {
+    title: "Providers",
+    eyebrow: "Delivery and OAuth",
+    summary: "Add email delivery and Google OAuth credentials now, or leave them blank.",
+    lessonTitle: "Secrets stay private",
+    lessons: [
+      "Provider secrets are accepted once and hidden after save.",
+      "Resend powers OTP, magic links, and password reset messages.",
+      "The Google guidance below updates from the domains you entered.",
+    ],
+  },
+  {
+    title: "Branding",
+    eyebrow: "Hosted pages",
+    summary: "Set the name and accent color shown on hosted auth screens.",
+    lessonTitle: "Small brand surface",
+    lessons: [
+      "Branding should be recognizable without making the auth flow feel noisy.",
+      "A single accent color is enough for buttons, focus rings, and active states.",
+      "You can revise this later from Settings without touching environment variables.",
+    ],
+  },
+  {
+    title: "Review",
+    eyebrow: "Launch",
+    summary: "Confirm the setup details, then create the owner and save the configuration.",
+    lessonTitle: "What happens next",
+    lessons: [
+      "Passport Auth creates the owner account, signs you in, and stores the settings.",
+      "Email and OAuth secrets are saved as protected settings and never echoed back.",
+      "After launch, the dashboard opens with setup progress and editable settings.",
+    ],
+  },
+];
 
 function escapeHtml(value) {
   return String(value)
@@ -70,6 +173,10 @@ function ensureOrigin(domain) {
     return cleanDomain.replace(/\/+$/, "");
   }
   return `https://${cleanDomain.replace(/\/+$/, "")}`;
+}
+
+function ownerInitials() {
+  return state.user?.email?.slice(0, 2).toUpperCase() || "PA";
 }
 
 async function api(path, options = {}) {
@@ -206,61 +313,305 @@ function renderAppShell(content) {
 }
 
 function renderSetup() {
+  if (setupComplete()) {
+    renderSetupComplete();
+    return;
+  }
+
+  renderOnboarding();
+}
+
+function renderSetupComplete() {
   const owner = state.setup?.owner;
-  const form = owner
-    ? `
-      <section class="form-panel">
-        <div class="panel-heading">
-          <span class="eyebrow">Owner account</span>
-          <h3>Owner account created</h3>
-        </div>
-        <div class="summary">
-          <span>Email</span>
-          <strong>${escapeHtml(owner.email)}</strong>
-        </div>
-        <p>Email delivery can be configured later in Settings.</p>
-        <div class="form-actions">
-          <button class="primary-action" type="button" data-action="go-dashboard">Go to dashboard</button>
-          <a class="secondary-action" href="/" data-link>Back to overview</a>
-        </div>
-      </section>
-    `
-    : `
-      <form class="form-panel" data-form="setup">
-        <div class="form-grid">
-          <label class="field">
-            <span>Owner email</span>
-            <input name="ownerEmail" type="email" autocomplete="email" placeholder="owner@example.com" required />
-          </label>
-          <label class="field">
-            <span>Password</span>
-            <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
-          </label>
-          <label class="field">
-            <span>Confirm password</span>
-            <input name="confirmPassword" type="password" autocomplete="new-password" placeholder="Repeat password" minlength="12" required />
-          </label>
-        </div>
-        ${renderError()}
-        <div class="form-actions">
-          <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-            ${state.busy ? "Creating owner..." : "Create owner account"}
-          </button>
-          <a class="secondary-action" href="/" data-link>Back to overview</a>
-        </div>
-      </form>
-    `;
 
   renderAppShell(`
     <div class="route-stack">
-      <div class="page-heading">
+      <div class="page-heading compact-heading">
         <span class="eyebrow">Setup</span>
-        <h2>Setup Passport Auth</h2>
-        <p>Create the first owner account. Domains, OAuth, and email delivery can be configured later.</p>
+        <h2>Onboarding complete</h2>
+        <p>The owner account exists. Configuration can be revised from Settings.</p>
       </div>
-      ${form}
+      <section class="form-panel completion-panel">
+        <div class="avatar-row">
+          <span class="account-avatar">${escapeHtml(ownerInitials())}</span>
+          <div>
+            <span class="eyebrow">Owner account</span>
+            <h3>${escapeHtml(owner?.email || "Configured")}</h3>
+          </div>
+        </div>
+        <div class="form-actions">
+          <a class="primary-action" href="/" data-link>Go to dashboard</a>
+          <a class="secondary-action" href="/settings" data-link>Edit settings</a>
+        </div>
+      </section>
     </div>
   `);
+}
+
+function renderOnboarding() {
+  const step = onboardingSteps[state.onboardingStep];
+  const isFinalStep = state.onboardingStep === onboardingSteps.length - 1;
+  const canGoBack = state.onboardingStep > 0;
+
+  renderAppShell(`
+    <form class="onboarding-layout" data-form="onboarding">
+      <aside class="step-rail" aria-label="Onboarding steps">
+        <span class="eyebrow">First run</span>
+        <h2>Configure Passport Auth</h2>
+        <ol>
+          ${onboardingSteps
+            .map(
+              (item, index) => `
+                <li class="${index === state.onboardingStep ? "active" : ""} ${
+                  index < state.onboardingStep ? "complete" : ""
+                }">
+                  <span>${index + 1}</span>
+                  <strong>${item.title}</strong>
+                </li>
+              `,
+            )
+            .join("")}
+        </ol>
+      </aside>
+
+      <section class="onboarding-main">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">${escapeHtml(step.eyebrow)}</span>
+          <h2>${escapeHtml(step.title)}</h2>
+          <p>${escapeHtml(step.summary)}</p>
+        </div>
+
+        <div class="lesson-panel">
+          <div>
+            <span class="eyebrow">${escapeHtml(step.lessonTitle)}</span>
+            <ul>
+              ${step.lessons.map((lesson) => `<li>${escapeHtml(lesson)}</li>`).join("")}
+            </ul>
+          </div>
+        </div>
+
+        ${renderOnboardingFields(state.onboardingStep)}
+        ${renderError()}
+        <div class="form-actions">
+          ${
+            canGoBack
+              ? `<button class="secondary-action" type="button" data-action="onboarding-back">Back</button>`
+              : `<a class="secondary-action" href="/" data-link>Back to overview</a>`
+          }
+          <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+            ${state.busy ? "Saving..." : isFinalStep ? "Complete setup" : "Continue"}
+          </button>
+        </div>
+      </section>
+    </form>
+  `);
+}
+
+function renderOnboardingFields(stepIndex) {
+  const data = state.onboarding;
+
+  if (stepIndex === 0) {
+    return `
+      <div class="welcome-panel">
+        <div>
+          <span class="eyebrow">Setup path</span>
+          <strong>7 focused steps</strong>
+          <p>Nothing is saved until the final review. You can leave optional provider fields blank.</p>
+        </div>
+        <div>
+          <span class="eyebrow">After launch</span>
+          <strong>Protected dashboard</strong>
+          <p>The setup wizard closes and the dashboard login protects the admin surface.</p>
+        </div>
+      </div>
+    `;
+  }
+
+  if (stepIndex === 1) {
+    return `
+      <div class="form-grid">
+        <label class="field">
+          <span>Owner email</span>
+          <input name="ownerEmail" type="email" autocomplete="email" value="${escapeHtml(
+            data.ownerEmail,
+          )}" placeholder="owner@example.com" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="new-password" value="${escapeHtml(
+            data.password,
+          )}" placeholder="Minimum 12 characters" minlength="12" required />
+        </label>
+        <label class="field">
+          <span>Confirm password</span>
+          <input name="confirmPassword" type="password" autocomplete="new-password" value="${escapeHtml(
+            data.confirmPassword,
+          )}" placeholder="Repeat password" minlength="12" required />
+        </label>
+      </div>
+    `;
+  }
+
+  if (stepIndex === 2) {
+    return `
+      <div class="form-grid two-columns">
+        <label class="field">
+          <span>Application domain</span>
+          <input name="app_domain" type="text" value="${escapeHtml(
+            data.app_domain,
+          )}" placeholder="app.example.com" />
+        </label>
+        <label class="field">
+          <span>Auth domain</span>
+          <input name="auth_domain" type="text" value="${escapeHtml(
+            data.auth_domain,
+          )}" placeholder="auth.example.com" />
+        </label>
+        <label class="field">
+          <span>Allowed origins</span>
+          <textarea name="allowed_origins" rows="4" placeholder="https://app.example.com">${escapeHtml(
+            data.allowed_origins,
+          )}</textarea>
+        </label>
+        <label class="field">
+          <span>Redirect URLs</span>
+          <textarea name="redirect_urls" rows="4" placeholder="https://app.example.com/auth/callback">${escapeHtml(
+            data.redirect_urls,
+          )}</textarea>
+        </label>
+      </div>
+    `;
+  }
+
+  if (stepIndex === 3) {
+    return `
+      <div class="toggle-grid">
+        ${Object.entries(authMethodLabels)
+          .map(
+            ([name, label]) => `
+              <label class="toggle-row">
+                <input name="${name}" type="checkbox" ${data[name] ? "checked" : ""} />
+                <span class="toggle-control" aria-hidden="true"></span>
+                <span>${label}</span>
+              </label>
+            `,
+          )
+          .join("")}
+      </div>
+    `;
+  }
+
+  if (stepIndex === 4) {
+    const googleOrigin = ensureOrigin(data.auth_domain || data.app_domain);
+    const googleRedirectUrl = googleOrigin
+      ? `${googleOrigin}/api/v1/auth/google/callback`
+      : "https://auth.example.com/api/v1/auth/google/callback";
+
+    return `
+      <div class="form-grid two-columns">
+        <label class="field">
+          <span>Resend from email</span>
+          <input name="resend_from_email" type="text" value="${escapeHtml(
+            data.resend_from_email,
+          )}" placeholder="Passport Auth <auth@example.com>" />
+        </label>
+        <label class="field">
+          <span>Resend API key</span>
+          <input name="resend_api_key" type="password" value="${escapeHtml(
+            data.resend_api_key,
+          )}" placeholder="re_..." />
+        </label>
+        <label class="field">
+          <span>Google client ID</span>
+          <input name="google_client_id" type="text" value="${escapeHtml(
+            data.google_client_id,
+          )}" placeholder="000000000000-example.apps.googleusercontent.com" />
+        </label>
+        <label class="field">
+          <span>Google client secret</span>
+          <input name="google_client_secret" type="password" value="${escapeHtml(
+            data.google_client_secret,
+          )}" placeholder="GOCSPX-..." />
+        </label>
+      </div>
+      <div class="guidance">
+        <div>
+          <span>Authorized JavaScript origin</span>
+          <code>${escapeHtml(googleOrigin || "https://auth.example.com")}</code>
+        </div>
+        <div>
+          <span>Authorized redirect URI</span>
+          <code>${escapeHtml(googleRedirectUrl)}</code>
+        </div>
+      </div>
+    `;
+  }
+
+  if (stepIndex === 5) {
+    return `
+      <div class="form-grid two-columns">
+        <label class="field">
+          <span>Brand name</span>
+          <input name="brand_name" type="text" value="${escapeHtml(
+            data.brand_name,
+          )}" placeholder="Passport Auth" />
+        </label>
+        <label class="field">
+          <span>Primary color</span>
+          <input name="primary_color" type="text" value="${escapeHtml(
+            data.primary_color,
+          )}" placeholder="#f5f5f7" />
+        </label>
+      </div>
+      <div class="brand-preview" style="--preview-color: ${escapeHtml(data.primary_color)}">
+        <span class="brand-preview-mark">PA</span>
+        <div>
+          <strong>${escapeHtml(data.brand_name || "Passport Auth")}</strong>
+          <small>Hosted auth preview</small>
+        </div>
+      </div>
+    `;
+  }
+
+  return renderOnboardingReview();
+}
+
+function renderOnboardingReview() {
+  const data = state.onboarding;
+  const methods = Object.entries(authMethodLabels)
+    .filter(([key]) => data[key])
+    .map(([, label]) => label);
+  const urls = [
+    data.app_domain || "Application domain not set",
+    data.auth_domain || "Auth domain not set",
+  ];
+
+  return `
+    <div class="review-grid">
+      <div>
+        <span class="eyebrow">Owner</span>
+        <strong>${escapeHtml(data.ownerEmail || "Missing owner email")}</strong>
+      </div>
+      <div>
+        <span class="eyebrow">URLs</span>
+        <strong>${urls.map(escapeHtml).join(" · ")}</strong>
+      </div>
+      <div>
+        <span class="eyebrow">Methods</span>
+        <strong>${escapeHtml(methods.join(", ") || "No methods selected")}</strong>
+      </div>
+      <div>
+        <span class="eyebrow">Providers</span>
+        <strong>${data.resend_api_key ? "Resend configured" : "Resend skipped"} · ${
+          data.google_client_secret ? "Google configured" : "Google skipped"
+        }</strong>
+      </div>
+      <div>
+        <span class="eyebrow">Brand</span>
+        <strong>${escapeHtml(data.brand_name || "Passport Auth")}</strong>
+      </div>
+    </div>
+  `;
 }
 
 function renderAuth() {
@@ -272,12 +623,12 @@ function renderAuth() {
   app.innerHTML = `
     ${brandMarkup(true)}
     <section class="auth-card" aria-label="Dashboard authentication">
-      <div class="page-heading">
+      <div class="page-heading compact-heading">
         <span class="eyebrow">Dashboard auth</span>
-        <h2>${login ? "Sign in to Passport Auth" : "Reset dashboard password"}</h2>
+        <h2>${login ? "Sign in" : "Reset password"}</h2>
         <p>${
           login
-            ? "Use the owner email and password created during first launch."
+            ? "Use the owner email and password created during onboarding."
             : "Reset access with a one-time code sent to the owner email."
         }</p>
       </div>
@@ -389,10 +740,10 @@ function renderDashboard() {
 
   renderAppShell(`
     <div class="hero">
-      <div class="page-heading">
+      <div class="page-heading compact-heading">
         <span class="eyebrow">Dashboard</span>
-        <h2>Deploy your auth surface</h2>
-        <p>Hosted pages, public API, dashboard, and service keys behind one web service.</p>
+        <h2>Auth control plane</h2>
+        <p>Hosted pages, public APIs, dashboard controls, and service keys behind one web service.</p>
       </div>
       <div class="panel">
         <div class="panel-heading">
@@ -424,7 +775,7 @@ function renderDashboard() {
 function renderPlaceholder(title, body) {
   renderAppShell(`
     <div class="placeholder-view">
-      <div class="page-heading">
+      <div class="page-heading compact-heading">
         <span class="eyebrow">Dashboard</span>
         <h2>${title}</h2>
         <p>${body}</p>
@@ -444,7 +795,7 @@ function renderSettings() {
   if (!state.settings) {
     renderAppShell(`
       <div class="placeholder-view">
-        <div class="page-heading">
+        <div class="page-heading compact-heading">
           <span class="eyebrow">Dashboard</span>
           <h2>Settings</h2>
           <p>Loading saved configuration.</p>
@@ -462,7 +813,7 @@ function renderSettings() {
 
   renderAppShell(`
     <form class="route-stack settings-route" data-form="settings">
-      <div class="page-heading">
+      <div class="page-heading compact-heading">
         <span class="eyebrow">Dashboard</span>
         <h2>Settings</h2>
         <p>Configure domains, redirect URLs, Resend, Google OAuth, branding, and auth methods.</p>
@@ -630,8 +981,7 @@ function render() {
   }
 
   if (path === "/setup") {
-    window.history.replaceState({}, "", "/");
-    renderDashboard();
+    renderSetup();
     return;
   }
 
@@ -653,18 +1003,95 @@ function render() {
   renderDashboard();
 }
 
-async function handleSetupSubmit(form) {
+function syncOnboardingFromForm(form) {
   const formData = new FormData(form);
-  const email = String(formData.get("ownerEmail") || "").trim();
-  const password = String(formData.get("password") || "");
-  const confirmPassword = String(formData.get("confirmPassword") || "");
+  const fields = [
+    "ownerEmail",
+    "password",
+    "confirmPassword",
+    "app_domain",
+    "auth_domain",
+    "allowed_origins",
+    "redirect_urls",
+    "resend_from_email",
+    "resend_api_key",
+    "google_client_id",
+    "google_client_secret",
+    "brand_name",
+    "primary_color",
+  ];
 
-  if (password !== confirmPassword) {
-    state.error = "Passwords do not match.";
-    render();
-    return;
+  for (const field of fields) {
+    if (formData.has(field)) {
+      state.onboarding[field] = String(formData.get(field) || "").trim();
+    }
   }
 
+  for (const method of Object.keys(authMethodLabels)) {
+    if (state.onboardingStep === 3) {
+      state.onboarding[method] = checkboxValue(formData, method);
+    }
+  }
+}
+
+function validateOnboardingStep(stepIndex) {
+  const data = state.onboarding;
+
+  if (stepIndex === 1) {
+    if (!data.ownerEmail || !data.ownerEmail.includes("@")) {
+      return "Enter a valid owner email.";
+    }
+    if (data.password.length < 12) {
+      return "Password must be at least 12 characters.";
+    }
+    if (data.password !== data.confirmPassword) {
+      return "Passwords do not match.";
+    }
+  }
+
+  if (stepIndex === 3) {
+    const hasMethod = Object.keys(authMethodLabels).some((key) => state.onboarding[key]);
+    if (!hasMethod) {
+      return "Enable at least one auth method.";
+    }
+  }
+
+  if (stepIndex === 6 && !data.ownerEmail) {
+    return "Owner account details are required before launch.";
+  }
+
+  return "";
+}
+
+function buildSettingsPayload() {
+  const data = state.onboarding;
+  const payload = {
+    app_domain: data.app_domain,
+    auth_domain: data.auth_domain,
+    allowed_origins: linesToList(data.allowed_origins),
+    redirect_urls: linesToList(data.redirect_urls),
+    resend_from_email: data.resend_from_email,
+    google_client_id: data.google_client_id,
+    brand_name: data.brand_name || "Passport Auth",
+    primary_color: data.primary_color || "#f5f5f7",
+    password_login_enabled: data.password_login_enabled,
+    otp_login_enabled: data.otp_login_enabled,
+    magic_link_enabled: data.magic_link_enabled,
+    google_oauth_enabled: data.google_oauth_enabled,
+    password_reset_otp_enabled: data.password_reset_otp_enabled,
+  };
+
+  if (data.resend_api_key) {
+    payload.resend_api_key = data.resend_api_key;
+  }
+  if (data.google_client_secret) {
+    payload.google_client_secret = data.google_client_secret;
+  }
+
+  return payload;
+}
+
+async function completeOnboarding() {
   state.busy = true;
   state.error = "";
   render();
@@ -672,9 +1099,29 @@ async function handleSetupSubmit(form) {
   try {
     state.setup = await api("/api/v1/setup/owner", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({
+        email: state.onboarding.ownerEmail,
+        password: state.onboarding.password,
+      }),
+      headers: {},
     });
-    state.message = "Owner created. Sign in with that password.";
+    const login = await api("/api/v1/dashboard/auth/login", {
+      method: "POST",
+      body: JSON.stringify({
+        email: state.onboarding.ownerEmail,
+        password: state.onboarding.password,
+      }),
+      headers: {},
+    });
+    state.token = login.access_token;
+    state.user = login.user;
+    localStorage.setItem(TOKEN_KEY, state.token);
+    state.settings = await api("/api/v1/dashboard/settings", {
+      method: "PUT",
+      body: JSON.stringify(buildSettingsPayload()),
+    });
+    state.onboarding = { ...defaultOnboarding };
+    state.onboardingStep = 0;
     window.history.replaceState({}, "", "/");
   } catch (error) {
     state.error = error.message;
@@ -682,6 +1129,27 @@ async function handleSetupSubmit(form) {
     state.busy = false;
     render();
   }
+}
+
+async function handleOnboardingSubmit(form) {
+  syncOnboardingFromForm(form);
+  const validationError = validateOnboardingStep(state.onboardingStep);
+  if (validationError) {
+    state.error = validationError;
+    render();
+    return;
+  }
+
+  state.error = "";
+  state.message = "";
+
+  if (state.onboardingStep < onboardingSteps.length - 1) {
+    state.onboardingStep += 1;
+    render();
+    return;
+  }
+
+  await completeOnboarding();
 }
 
 async function handleLoginSubmit(form) {
@@ -815,8 +1283,8 @@ app.addEventListener("submit", (event) => {
   const form = event.target;
   const formName = form.dataset.form;
 
-  if (formName === "setup") {
-    void handleSetupSubmit(form);
+  if (formName === "onboarding") {
+    void handleOnboardingSubmit(form);
   }
   if (formName === "login") {
     void handleLoginSubmit(form);
@@ -869,6 +1337,11 @@ app.addEventListener("click", (event) => {
   }
   if (action === "go-dashboard") {
     navigate("/");
+  }
+  if (action === "onboarding-back") {
+    state.onboardingStep = Math.max(0, state.onboardingStep - 1);
+    state.error = "";
+    render();
   }
 });
 
