@@ -28,8 +28,14 @@ async def test_serves_dashboard_assets_and_routes(tmp_path) -> None:
     assert "<h1>Dashboard</h1>" in setup_response.text
     assert stylesheet_response.status_code == 200
     assert stylesheet_response.text == "body { color: white; }"
+    assert stylesheet_response.headers["cache-control"] == (
+        "no-store, no-cache, must-revalidate, max-age=0"
+    )
     assert script_response.status_code == 200
     assert script_response.text == "console.log('plain dashboard');"
+    assert script_response.headers["cache-control"] == (
+        "no-store, no-cache, must-revalidate, max-age=0"
+    )
     assert asset_response.status_code == 200
     assert asset_response.text == "console.log('dashboard');"
     assert api_response.status_code == 404

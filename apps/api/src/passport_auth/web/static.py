@@ -4,6 +4,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from starlette.staticfiles import StaticFiles
 
+STATIC_HEADERS = {
+    "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Pragma": "no-cache",
+}
+
 
 def mount_dashboard(app: FastAPI, static_dir: str | Path) -> None:
     static_path = Path(static_dir)
@@ -25,6 +30,6 @@ def mount_dashboard(app: FastAPI, static_dir: str | Path) -> None:
         requested_path = (static_path / path).resolve()
         static_root = static_path.resolve()
         if requested_path.is_file() and requested_path.is_relative_to(static_root):
-            return FileResponse(requested_path)
+            return FileResponse(requested_path, headers=STATIC_HEADERS)
 
-        return FileResponse(index_path)
+        return FileResponse(index_path, headers=STATIC_HEADERS)

@@ -15,9 +15,12 @@ def test_static_dashboard_contains_multi_step_onboarding() -> None:
 
 
 def test_static_dashboard_uses_obsidian_control_room_design() -> None:
+    index_html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
+    assert "passport-auth-ui-version" in index_html
+    assert "2026-06-02-control-room" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
