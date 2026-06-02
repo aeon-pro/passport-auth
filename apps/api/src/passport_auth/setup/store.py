@@ -36,6 +36,9 @@ class EmailTemplate:
     body: str
     button_label: str
     accent_color: str
+    footer_text: str
+    support_label: str
+    support_url: str
 
 
 DEFAULT_EMAIL_TEMPLATES = (
@@ -47,6 +50,9 @@ DEFAULT_EMAIL_TEMPLATES = (
         body="Use the secure link below to finish signing in. The link expires soon.",
         button_label="Open magic link",
         accent_color="#f5f5f7",
+        footer_text="If you did not request this sign-in link, you can safely ignore this email.",
+        support_label="Contact support",
+        support_url="mailto:support@example.com",
     ),
     EmailTemplate(
         key="otp",
@@ -56,6 +62,9 @@ DEFAULT_EMAIL_TEMPLATES = (
         body="Enter {{code}} to continue. This code expires soon.",
         button_label="Use this code",
         accent_color="#f5f5f7",
+        footer_text="If you did not request this code, you can safely ignore this email.",
+        support_label="Contact support",
+        support_url="mailto:support@example.com",
     ),
     EmailTemplate(
         key="password_reset",
@@ -68,6 +77,9 @@ DEFAULT_EMAIL_TEMPLATES = (
         ),
         button_label="Reset password",
         accent_color="#f5f5f7",
+        footer_text="If you did not request this password reset, contact support immediately.",
+        support_label="Contact support",
+        support_url="mailto:support@example.com",
     ),
 )
 
@@ -484,6 +496,9 @@ def _email_templates_tuple(value: object) -> tuple[EmailTemplate, ...]:
                 body="",
                 button_label="",
                 accent_color="#f5f5f7",
+                footer_text="If you did not request this email, you can safely ignore it.",
+                support_label="Contact support",
+                support_url="mailto:support@example.com",
             ),
         )
         templates.append(
@@ -500,6 +515,18 @@ def _email_templates_tuple(value: object) -> tuple[EmailTemplate, ...]:
                 accent_color=_clean_template_value(
                     item.get("accent_color"),
                     fallback.accent_color,
+                ),
+                footer_text=_clean_template_value(
+                    item.get("footer_text"),
+                    fallback.footer_text,
+                ),
+                support_label=_clean_template_value(
+                    item.get("support_label"),
+                    fallback.support_label,
+                ),
+                support_url=_clean_template_value(
+                    item.get("support_url"),
+                    fallback.support_url,
                 ),
             )
         )

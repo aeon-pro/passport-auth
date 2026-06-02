@@ -81,6 +81,11 @@ async def test_dashboard_settings_return_defaults() -> None:
                 "body": "Use the secure link below to finish signing in. The link expires soon.",
                 "button_label": "Open magic link",
                 "accent_color": "#f5f5f7",
+                "footer_text": (
+                    "If you did not request this sign-in link, you can safely ignore this email."
+                ),
+                "support_label": "Contact support",
+                "support_url": "mailto:support@example.com",
             },
             {
                 "key": "otp",
@@ -90,6 +95,11 @@ async def test_dashboard_settings_return_defaults() -> None:
                 "body": "Enter {{code}} to continue. This code expires soon.",
                 "button_label": "Use this code",
                 "accent_color": "#f5f5f7",
+                "footer_text": (
+                    "If you did not request this code, you can safely ignore this email."
+                ),
+                "support_label": "Contact support",
+                "support_url": "mailto:support@example.com",
             },
             {
                 "key": "password_reset",
@@ -102,6 +112,11 @@ async def test_dashboard_settings_return_defaults() -> None:
                 ),
                 "button_label": "Reset password",
                 "accent_color": "#f5f5f7",
+                "footer_text": (
+                    "If you did not request this password reset, contact support immediately."
+                ),
+                "support_label": "Contact support",
+                "support_url": "mailto:support@example.com",
             },
         ],
     }
@@ -170,6 +185,11 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
                 "body": "Use the secure link below to finish signing in. The link expires soon.",
                 "button_label": "Open magic link",
                 "accent_color": "#f5f5f7",
+                "footer_text": (
+                    "If you did not request this sign-in link, you can safely ignore this email."
+                ),
+                "support_label": "Contact support",
+                "support_url": "mailto:support@example.com",
             },
             {
                 "key": "otp",
@@ -179,6 +199,11 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
                 "body": "Enter {{code}} to continue. This code expires soon.",
                 "button_label": "Use this code",
                 "accent_color": "#f5f5f7",
+                "footer_text": (
+                    "If you did not request this code, you can safely ignore this email."
+                ),
+                "support_label": "Contact support",
+                "support_url": "mailto:support@example.com",
             },
             {
                 "key": "password_reset",
@@ -191,6 +216,11 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
                 ),
                 "button_label": "Reset password",
                 "accent_color": "#f5f5f7",
+                "footer_text": (
+                    "If you did not request this password reset, contact support immediately."
+                ),
+                "support_label": "Contact support",
+                "support_url": "mailto:support@example.com",
             },
         ],
     }
@@ -210,6 +240,9 @@ async def test_dashboard_settings_save_email_templates() -> None:
             "body": "Tap below to continue into {{brand_name}}.",
             "button_label": "Continue",
             "accent_color": "#7cffaa",
+            "footer_text": "If you did not request this link, you can ignore this email.",
+            "support_label": "Contact support",
+            "support_url": "mailto:support@alactic.net",
         },
         {
             "key": "otp",
@@ -219,6 +252,9 @@ async def test_dashboard_settings_save_email_templates() -> None:
             "body": "Your one-time code is {{code}}.",
             "button_label": "Copy code",
             "accent_color": "#b8f3ff",
+            "footer_text": "If this was not you, no action is required.",
+            "support_label": "Contact support",
+            "support_url": "https://alactic.net/support",
         },
         {
             "key": "password_reset",
@@ -228,6 +264,9 @@ async def test_dashboard_settings_save_email_templates() -> None:
             "body": "Use {{code}} to reset the dashboard password.",
             "button_label": "Reset",
             "accent_color": "#ffd27a",
+            "footer_text": "If you did not request a reset, contact us immediately.",
+            "support_label": "Contact us",
+            "support_url": "mailto:security@alactic.net",
         },
     ]
 
@@ -244,6 +283,25 @@ async def test_dashboard_settings_save_email_templates() -> None:
     assert save_response.status_code == 200
     assert save_response.json()["email_templates"] == templates
     assert read_response.json()["email_templates"] == templates
+
+
+@pytest.mark.asyncio
+async def test_dashboard_settings_email_templates_include_footer_support_defaults() -> None:
+    transport = ASGITransport(app=create_test_app())
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await login_owner(client)
+        response = await client.get(
+            "/api/v1/dashboard/settings",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+    templates = response.json()["email_templates"]
+    assert all(
+        template["footer_text"].startswith("If you did not request") for template in templates
+    )
+    assert all(template["support_label"] == "Contact support" for template in templates)
+    assert all(template["support_url"].startswith("mailto:") for template in templates)
 
 
 def test_dashboard_setting_secrets_are_encrypted_for_storage() -> None:

@@ -18,8 +18,22 @@ class EmailTemplateModel(BaseModel):
     body: str = Field(max_length=1200)
     button_label: str = Field(max_length=80)
     accent_color: str = Field(max_length=32)
+    footer_text: str = Field(max_length=500)
+    support_label: str = Field(max_length=80)
+    support_url: str = Field(max_length=320)
 
-    @field_validator("key", "name", "subject", "headline", "body", "button_label", "accent_color")
+    @field_validator(
+        "key",
+        "name",
+        "subject",
+        "headline",
+        "body",
+        "button_label",
+        "accent_color",
+        "footer_text",
+        "support_label",
+        "support_url",
+    )
     @classmethod
     def strip_template_string(cls, value: str) -> str:
         return value.strip()
@@ -114,6 +128,9 @@ def build_settings_response(settings: DashboardSettings) -> DashboardSettingsRes
                 body=template.body,
                 button_label=template.button_label,
                 accent_color=template.accent_color,
+                footer_text=template.footer_text,
+                support_label=template.support_label,
+                support_url=template.support_url,
             )
             for template in settings.email_templates
         ],

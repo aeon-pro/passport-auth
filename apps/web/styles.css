@@ -716,8 +716,8 @@ p {
 
 .template-card {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
-  gap: 18px;
+  grid-template-columns: minmax(0, 0.98fr) minmax(320px, 1.02fr);
+  gap: 20px;
   border: 1px solid var(--line-soft);
   border-radius: 8px;
   background:
@@ -734,16 +734,22 @@ p {
 
 .template-preview {
   display: grid;
-  align-content: start;
+  min-height: 100%;
+  align-content: center;
+  justify-items: center;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #f7f7f4;
+  background:
+    radial-gradient(circle at 50% 0, rgba(255, 255, 255, 0.72), transparent 210px),
+    #f3f3ef;
   color: #101013;
-  padding: 16px;
+  padding: 24px;
+  text-align: center;
 }
 
 .template-subject {
+  width: min(100%, 390px);
   color: #616166;
   font-size: 11px;
   font-weight: 560;
@@ -752,11 +758,16 @@ p {
 
 .template-mail {
   display: grid;
-  gap: 13px;
+  width: min(100%, 390px);
+  justify-items: center;
+  gap: 15px;
   border: 1px solid #deded6;
   border-radius: 8px;
-  background: #ffffff;
-  padding: 22px;
+  background:
+    linear-gradient(180deg, #ffffff, #fbfbf8),
+    #ffffff;
+  padding: 30px 26px 24px;
+  box-shadow: 0 22px 55px rgba(16, 16, 19, 0.1);
 }
 
 .template-logo {
@@ -765,7 +776,7 @@ p {
   height: 36px;
   place-items: center;
   border-radius: 7px;
-  background: color-mix(in srgb, var(--template-color, #101013) 15%, #101013);
+  background: color-mix(in srgb, var(--template-color, #101013) 45%, #101013);
   color: #ffffff;
   font-size: 11px;
   font-weight: 560;
@@ -775,11 +786,11 @@ p {
   margin: 0;
   color: #101013;
   font-size: 24px;
-  font-weight: 430;
+  font-weight: 460;
   line-height: 1.08;
 }
 
-.template-mail p {
+.template-mail .email-body-copy {
   max-width: none;
   margin: 0;
   color: #5b5b62;
@@ -793,11 +804,44 @@ p {
   min-height: 38px;
   align-items: center;
   border-radius: 7px;
-  background: var(--template-color, #101013);
-  color: #050506;
+  background: color-mix(in srgb, var(--template-color, #101013) 78%, #101013);
+  color: #ffffff;
   padding: 0 14px;
   font-size: 12px;
   font-weight: 560;
+}
+
+.email-preview-footer {
+  display: grid;
+  width: 100%;
+  justify-items: center;
+  gap: 10px;
+  margin-top: 4px;
+  border-top: 1px solid #ecece7;
+  padding-top: 16px;
+}
+
+.email-safe-note {
+  max-width: 310px;
+  margin: 0;
+  color: #77777d;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.email-contact-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  color: #8b8b91;
+  font-size: 11px;
+}
+
+.email-contact-row a {
+  color: color-mix(in srgb, var(--template-color, #101013) 70%, #101013);
+  font-weight: 620;
 }
 
 .guidance {

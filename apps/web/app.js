@@ -10,6 +10,9 @@ const defaultEmailTemplates = [
     body: "Use the secure link below to finish signing in. The link expires soon.",
     button_label: "Open magic link",
     accent_color: "#f5f5f7",
+    footer_text: "If you did not request this sign-in link, you can safely ignore this email.",
+    support_label: "Contact support",
+    support_url: "mailto:support@example.com",
   },
   {
     key: "otp",
@@ -19,6 +22,9 @@ const defaultEmailTemplates = [
     body: "Enter {{code}} to continue. This code expires soon.",
     button_label: "Use this code",
     accent_color: "#f5f5f7",
+    footer_text: "If you did not request this code, you can safely ignore this email.",
+    support_label: "Contact support",
+    support_url: "mailto:support@example.com",
   },
   {
     key: "password_reset",
@@ -29,6 +35,9 @@ const defaultEmailTemplates = [
       "Enter {{code}} to reset your dashboard password. Ignore this email if you did not request it.",
     button_label: "Reset password",
     accent_color: "#f5f5f7",
+    footer_text: "If you did not request this password reset, contact support immediately.",
+    support_label: "Contact support",
+    support_url: "mailto:support@example.com",
   },
 ];
 
@@ -266,6 +275,15 @@ function readEmailTemplatesFromForm(form) {
     accent_color:
       String(formData.get(`email_templates.${index}.accent_color`) || "").trim() ||
       defaultTemplate.accent_color,
+    footer_text:
+      String(formData.get(`email_templates.${index}.footer_text`) || "").trim() ||
+      defaultTemplate.footer_text,
+    support_label:
+      String(formData.get(`email_templates.${index}.support_label`) || "").trim() ||
+      defaultTemplate.support_label,
+    support_url:
+      String(formData.get(`email_templates.${index}.support_url`) || "").trim() ||
+      defaultTemplate.support_url,
   }));
 }
 
@@ -728,6 +746,9 @@ function renderTemplateCard(template, index, brandName) {
   const sampleHeadline = sampleTemplateText(template.headline, brandName);
   const sampleBody = sampleTemplateText(template.body, brandName);
   const sampleButton = sampleTemplateText(template.button_label, brandName);
+  const sampleFooter = sampleTemplateText(template.footer_text, brandName);
+  const sampleSupportLabel = sampleTemplateText(template.support_label, brandName);
+  const sampleSupportUrl = sampleTemplateText(template.support_url, brandName);
 
   return `
     <section class="template-card">
@@ -761,12 +782,32 @@ function renderTemplateCard(template, index, brandName) {
               template.body,
             )}</textarea>
           </label>
+          <label class="field">
+            <span>Footer note</span>
+            <textarea name="email_templates.${index}.footer_text" rows="3">${escapeHtml(
+              template.footer_text,
+            )}</textarea>
+          </label>
           <div class="form-grid two-columns">
             <label class="field">
               <span>Button label</span>
               <input name="email_templates.${index}.button_label" type="text" value="${escapeHtml(
                 template.button_label,
               )}" />
+            </label>
+            <label class="field">
+              <span>Support label</span>
+              <input name="email_templates.${index}.support_label" type="text" value="${escapeHtml(
+                template.support_label,
+              )}" />
+            </label>
+          </div>
+          <div class="form-grid two-columns">
+            <label class="field">
+              <span>Support URL</span>
+              <input name="email_templates.${index}.support_url" type="text" value="${escapeHtml(
+                template.support_url,
+              )}" placeholder="mailto:support@example.com" />
             </label>
             <label class="field">
               <span>Accent color</span>
@@ -795,8 +836,15 @@ function renderTemplateCard(template, index, brandName) {
         <div class="template-mail">
           <span class="template-logo">${escapeHtml((brandName || "PA").slice(0, 2).toUpperCase())}</span>
           <h4>${escapeHtml(sampleHeadline)}</h4>
-          <p>${escapeHtml(sampleBody)}</p>
+          <p class="email-body-copy">${escapeHtml(sampleBody)}</p>
           <strong>${escapeHtml(sampleButton)}</strong>
+          <footer class="email-preview-footer">
+            <p class="email-safe-note">${escapeHtml(sampleFooter)}</p>
+            <div class="email-contact-row">
+              <span>Need help?</span>
+              <a href="${escapeHtml(sampleSupportUrl || "#")}">${escapeHtml(sampleSupportLabel)}</a>
+            </div>
+          </footer>
         </div>
       </article>
     </section>

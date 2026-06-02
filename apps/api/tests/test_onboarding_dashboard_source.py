@@ -20,7 +20,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-02-templates" in index_html
+    assert "2026-06-02-template-polish" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -68,3 +68,16 @@ def test_dashboard_contains_email_templates_page() -> None:
     assert "Password reset OTP" in app_js
     assert "template-preview" in styles_css
     assert "template-tabs" in styles_css
+
+
+def test_dashboard_email_template_previews_have_footer_and_contact_visuals() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "footer_text" in app_js
+    assert "support_label" in app_js
+    assert "support_url" in app_js
+    assert "email-preview-footer" in app_js
+    assert "email-safe-note" in styles_css
+    assert "email-contact-row" in styles_css
+    assert "text-align: center" in styles_css
