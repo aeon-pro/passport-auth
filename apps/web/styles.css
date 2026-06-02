@@ -619,7 +619,8 @@ p {
 }
 
 .settings-route,
-.settings-matrix {
+.settings-matrix,
+.templates-route {
   display: grid;
   max-width: 1120px;
   gap: 22px;
@@ -685,6 +686,118 @@ p {
 
 .section-save {
   min-width: 118px;
+}
+
+.template-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.template-tabs span {
+  display: grid;
+  gap: 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(10, 10, 12, 0.82);
+  padding: 14px;
+}
+
+.template-tabs strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 430;
+}
+
+.template-gallery {
+  display: grid;
+  gap: 16px;
+}
+
+.template-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+  gap: 18px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028), transparent 46%),
+    rgba(10, 10, 12, 0.84);
+  padding: 22px;
+}
+
+.template-editor {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+}
+
+.template-preview {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7f7f4;
+  color: #101013;
+  padding: 16px;
+}
+
+.template-subject {
+  color: #616166;
+  font-size: 11px;
+  font-weight: 560;
+  text-transform: uppercase;
+}
+
+.template-mail {
+  display: grid;
+  gap: 13px;
+  border: 1px solid #deded6;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 22px;
+}
+
+.template-logo {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--template-color, #101013) 15%, #101013);
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 560;
+}
+
+.template-mail h4 {
+  margin: 0;
+  color: #101013;
+  font-size: 24px;
+  font-weight: 430;
+  line-height: 1.08;
+}
+
+.template-mail p {
+  max-width: none;
+  margin: 0;
+  color: #5b5b62;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.template-mail strong {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 38px;
+  align-items: center;
+  border-radius: 7px;
+  background: var(--template-color, #101013);
+  color: #050506;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 560;
 }
 
 .guidance {
@@ -1059,6 +1172,14 @@ p {
   .settings-section > :not(.section-heading),
   .settings-section > .section-actions {
     grid-column: 1;
+  }
+
+  .template-card {
+    grid-template-columns: 1fr;
+  }
+
+  .template-tabs {
+    grid-template-columns: 1fr;
   }
 
   .settings-section .section-heading {

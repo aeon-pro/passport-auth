@@ -28,6 +28,51 @@ class PasswordResetOtp:
 
 
 @dataclass(frozen=True)
+class EmailTemplate:
+    key: str
+    name: str
+    subject: str
+    headline: str
+    body: str
+    button_label: str
+    accent_color: str
+
+
+DEFAULT_EMAIL_TEMPLATES = (
+    EmailTemplate(
+        key="magic_link",
+        name="Magic link",
+        subject="Sign in to {{brand_name}}",
+        headline="Your sign-in link is ready",
+        body="Use the secure link below to finish signing in. The link expires soon.",
+        button_label="Open magic link",
+        accent_color="#f5f5f7",
+    ),
+    EmailTemplate(
+        key="otp",
+        name="One-time passcode",
+        subject="Your {{brand_name}} verification code",
+        headline="Your verification code",
+        body="Enter {{code}} to continue. This code expires soon.",
+        button_label="Use this code",
+        accent_color="#f5f5f7",
+    ),
+    EmailTemplate(
+        key="password_reset",
+        name="Password reset OTP",
+        subject="Reset your {{brand_name}} password",
+        headline="Reset your password",
+        body=(
+            "Enter {{code}} to reset your dashboard password. "
+            "Ignore this email if you did not request it."
+        ),
+        button_label="Reset password",
+        accent_color="#f5f5f7",
+    ),
+)
+
+
+@dataclass(frozen=True)
 class DashboardSettings:
     app_domain: str = ""
     auth_domain: str = ""
@@ -44,6 +89,7 @@ class DashboardSettings:
     magic_link_enabled: bool = False
     google_oauth_enabled: bool = False
     password_reset_otp_enabled: bool = True
+    email_templates: tuple[EmailTemplate, ...] = DEFAULT_EMAIL_TEMPLATES
 
 
 class SetupStore(Protocol):
@@ -369,6 +415,7 @@ def dashboard_settings_to_dict(settings: DashboardSettings) -> dict[str, object]
     data = asdict(settings)
     data["allowed_origins"] = list(settings.allowed_origins)
     data["redirect_urls"] = list(settings.redirect_urls)
+    data["email_templates"] = [asdict(template) for template in settings.email_templates]
     return data
 
 
@@ -392,6 +439,7 @@ def dashboard_settings_from_dict(data: dict[str, object]) -> DashboardSettings:
         magic_link_enabled=bool(merged["magic_link_enabled"]),
         google_oauth_enabled=bool(merged["google_oauth_enabled"]),
         password_reset_otp_enabled=bool(merged["password_reset_otp_enabled"]),
+        email_templates=_email_templates_tuple(merged["email_templates"]),
     )
 
 
@@ -408,6 +456,68 @@ def _optional_string(value: object) -> str | None:
 
     cleaned = str(value).strip()
     return cleaned or None
+
+
+def _email_templates_tuple(value: object) -> tuple[EmailTemplate, ...]:
+    if not isinstance(value, list | tuple):
+        return DEFAULT_EMAIL_TEMPLATES
+
+    templates: list[EmailTemplate] = []
+    seen_keys: set[str] = set()
+    defaults_by_key = {template.key: template for template in DEFAULT_EMAIL_TEMPLATES}
+
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+
+        key = _clean_template_value(item.get("key"), "")
+        if not key:
+            continue
+
+        fallback = defaults_by_key.get(
+            key,
+            EmailTemplate(
+                key=key,
+                name=key.replace("_", " ").title(),
+                subject="",
+                headline="",
+                body="",
+                button_label="",
+                accent_color="#f5f5f7",
+            ),
+        )
+        templates.append(
+            EmailTemplate(
+                key=key,
+                name=_clean_template_value(item.get("name"), fallback.name),
+                subject=_clean_template_value(item.get("subject"), fallback.subject),
+                headline=_clean_template_value(item.get("headline"), fallback.headline),
+                body=_clean_template_value(item.get("body"), fallback.body),
+                button_label=_clean_template_value(
+                    item.get("button_label"),
+                    fallback.button_label,
+                ),
+                accent_color=_clean_template_value(
+                    item.get("accent_color"),
+                    fallback.accent_color,
+                ),
+            )
+        )
+        seen_keys.add(key)
+
+    for template in DEFAULT_EMAIL_TEMPLATES:
+        if template.key not in seen_keys:
+            templates.append(template)
+
+    return tuple(templates) or DEFAULT_EMAIL_TEMPLATES
+
+
+def _clean_template_value(value: object, default: str) -> str:
+    if value is None:
+        return default
+
+    cleaned = str(value).strip()
+    return cleaned or default
 
 
 def dashboard_settings_to_storage_dict(

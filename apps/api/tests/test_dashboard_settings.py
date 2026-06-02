@@ -72,6 +72,38 @@ async def test_dashboard_settings_return_defaults() -> None:
         "magic_link_enabled": False,
         "google_oauth_enabled": False,
         "password_reset_otp_enabled": True,
+        "email_templates": [
+            {
+                "key": "magic_link",
+                "name": "Magic link",
+                "subject": "Sign in to {{brand_name}}",
+                "headline": "Your sign-in link is ready",
+                "body": "Use the secure link below to finish signing in. The link expires soon.",
+                "button_label": "Open magic link",
+                "accent_color": "#f5f5f7",
+            },
+            {
+                "key": "otp",
+                "name": "One-time passcode",
+                "subject": "Your {{brand_name}} verification code",
+                "headline": "Your verification code",
+                "body": "Enter {{code}} to continue. This code expires soon.",
+                "button_label": "Use this code",
+                "accent_color": "#f5f5f7",
+            },
+            {
+                "key": "password_reset",
+                "name": "Password reset OTP",
+                "subject": "Reset your {{brand_name}} password",
+                "headline": "Reset your password",
+                "body": (
+                    "Enter {{code}} to reset your dashboard password. "
+                    "Ignore this email if you did not request it."
+                ),
+                "button_label": "Reset password",
+                "accent_color": "#f5f5f7",
+            },
+        ],
     }
 
 
@@ -129,9 +161,89 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
         "magic_link_enabled": True,
         "google_oauth_enabled": True,
         "password_reset_otp_enabled": False,
+        "email_templates": [
+            {
+                "key": "magic_link",
+                "name": "Magic link",
+                "subject": "Sign in to {{brand_name}}",
+                "headline": "Your sign-in link is ready",
+                "body": "Use the secure link below to finish signing in. The link expires soon.",
+                "button_label": "Open magic link",
+                "accent_color": "#f5f5f7",
+            },
+            {
+                "key": "otp",
+                "name": "One-time passcode",
+                "subject": "Your {{brand_name}} verification code",
+                "headline": "Your verification code",
+                "body": "Enter {{code}} to continue. This code expires soon.",
+                "button_label": "Use this code",
+                "accent_color": "#f5f5f7",
+            },
+            {
+                "key": "password_reset",
+                "name": "Password reset OTP",
+                "subject": "Reset your {{brand_name}} password",
+                "headline": "Reset your password",
+                "body": (
+                    "Enter {{code}} to reset your dashboard password. "
+                    "Ignore this email if you did not request it."
+                ),
+                "button_label": "Reset password",
+                "accent_color": "#f5f5f7",
+            },
+        ],
     }
     assert "re_secret_key" not in read_response.text
     assert "google-client-secret" not in read_response.text
+
+
+@pytest.mark.asyncio
+async def test_dashboard_settings_save_email_templates() -> None:
+    transport = ASGITransport(app=create_test_app())
+    templates = [
+        {
+            "key": "magic_link",
+            "name": "Magic link",
+            "subject": "Access Alactic",
+            "headline": "Your secure link",
+            "body": "Tap below to continue into {{brand_name}}.",
+            "button_label": "Continue",
+            "accent_color": "#7cffaa",
+        },
+        {
+            "key": "otp",
+            "name": "One-time passcode",
+            "subject": "Code for Alactic",
+            "headline": "Use this code",
+            "body": "Your one-time code is {{code}}.",
+            "button_label": "Copy code",
+            "accent_color": "#b8f3ff",
+        },
+        {
+            "key": "password_reset",
+            "name": "Password reset OTP",
+            "subject": "Reset access",
+            "headline": "Reset requested",
+            "body": "Use {{code}} to reset the dashboard password.",
+            "button_label": "Reset",
+            "accent_color": "#ffd27a",
+        },
+    ]
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await login_owner(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        save_response = await client.put(
+            "/api/v1/dashboard/settings",
+            headers=headers,
+            json={"email_templates": templates},
+        )
+        read_response = await client.get("/api/v1/dashboard/settings", headers=headers)
+
+    assert save_response.status_code == 200
+    assert save_response.json()["email_templates"] == templates
+    assert read_response.json()["email_templates"] == templates
 
 
 def test_dashboard_setting_secrets_are_encrypted_for_storage() -> None:

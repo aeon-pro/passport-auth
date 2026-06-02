@@ -1,6 +1,37 @@
 const TOKEN_KEY = "passport-auth-token";
 const app = document.querySelector("#app");
 
+const defaultEmailTemplates = [
+  {
+    key: "magic_link",
+    name: "Magic link",
+    subject: "Sign in to {{brand_name}}",
+    headline: "Your sign-in link is ready",
+    body: "Use the secure link below to finish signing in. The link expires soon.",
+    button_label: "Open magic link",
+    accent_color: "#f5f5f7",
+  },
+  {
+    key: "otp",
+    name: "One-time passcode",
+    subject: "Your {{brand_name}} verification code",
+    headline: "Your verification code",
+    body: "Enter {{code}} to continue. This code expires soon.",
+    button_label: "Use this code",
+    accent_color: "#f5f5f7",
+  },
+  {
+    key: "password_reset",
+    name: "Password reset OTP",
+    subject: "Reset your {{brand_name}} password",
+    headline: "Reset your password",
+    body:
+      "Enter {{code}} to reset your dashboard password. Ignore this email if you did not request it.",
+    button_label: "Reset password",
+    accent_color: "#f5f5f7",
+  },
+];
+
 const defaultOnboarding = {
   ownerEmail: "",
   password: "",
@@ -20,6 +51,7 @@ const defaultOnboarding = {
   google_client_secret: "",
   brand_name: "Passport Auth",
   primary_color: "#f5f5f7",
+  email_templates: cloneEmailTemplates(),
 };
 
 const state = {
@@ -30,7 +62,7 @@ const state = {
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
   onboardingStep: 0,
-  onboarding: { ...defaultOnboarding },
+  onboarding: { ...defaultOnboarding, email_templates: cloneEmailTemplates() },
   resetEmail: "",
   devOtp: "",
   message: "",
@@ -39,9 +71,9 @@ const state = {
 };
 
 const routes = [
-  { href: "/setup", label: "Setup" },
   { href: "/users", label: "Users" },
   { href: "/settings", label: "Settings" },
+  { href: "/templates", label: "Templates" },
   { href: "/analytics", label: "Analytics" },
 ];
 
@@ -128,6 +160,17 @@ const onboardingSteps = [
     ],
   },
   {
+    title: "Templates",
+    eyebrow: "Email",
+    summary: "Customize the email copy and accent colors for links, codes, and resets.",
+    lessonTitle: "Reusable placeholders",
+    lessons: [
+      "Use {{brand_name}} where the saved brand name should appear.",
+      "Use {{code}} for OTP and password reset codes.",
+      "Template colors can follow the brand accent or use a separate email-specific accent.",
+    ],
+  },
+  {
     title: "Review",
     eyebrow: "Launch",
     summary: "Confirm the setup details, then create the owner and save the configuration.",
@@ -178,6 +221,52 @@ function ensureOrigin(domain) {
 function normalizeHexColor(value) {
   const color = String(value || "").trim();
   return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#f5f5f7";
+}
+
+function cloneEmailTemplates(templates = defaultEmailTemplates) {
+  return templates.map((template) => ({ ...template }));
+}
+
+function normalizeEmailTemplates(templates) {
+  const templatesByKey = new Map((templates || []).map((template) => [template.key, template]));
+  return defaultEmailTemplates.map((defaultTemplate) => ({
+    ...defaultTemplate,
+    ...(templatesByKey.get(defaultTemplate.key) || {}),
+  }));
+}
+
+function sampleTemplateText(value, brandName = "Passport Auth") {
+  return String(value || "")
+    .replaceAll("{{brand_name}}", brandName || "Passport Auth")
+    .replaceAll("{{code}}", "482913")
+    .replaceAll("{{magic_link}}", "https://auth.example.com/magic/secure-token");
+}
+
+function readEmailTemplatesFromForm(form) {
+  const formData = new FormData(form);
+  return defaultEmailTemplates.map((defaultTemplate, index) => ({
+    key:
+      String(formData.get(`email_templates.${index}.key`) || "").trim() ||
+      defaultTemplate.key,
+    name:
+      String(formData.get(`email_templates.${index}.name`) || "").trim() ||
+      defaultTemplate.name,
+    subject:
+      String(formData.get(`email_templates.${index}.subject`) || "").trim() ||
+      defaultTemplate.subject,
+    headline:
+      String(formData.get(`email_templates.${index}.headline`) || "").trim() ||
+      defaultTemplate.headline,
+    body:
+      String(formData.get(`email_templates.${index}.body`) || "").trim() ||
+      defaultTemplate.body,
+    button_label:
+      String(formData.get(`email_templates.${index}.button_label`) || "").trim() ||
+      defaultTemplate.button_label,
+    accent_color:
+      String(formData.get(`email_templates.${index}.accent_color`) || "").trim() ||
+      defaultTemplate.accent_color,
+  }));
 }
 
 function ownerInitials() {
@@ -318,39 +407,7 @@ function renderAppShell(content) {
 }
 
 function renderSetup() {
-  if (setupComplete()) {
-    renderSetupComplete();
-    return;
-  }
-
   renderOnboarding();
-}
-
-function renderSetupComplete() {
-  const owner = state.setup?.owner;
-
-  renderAppShell(`
-    <div class="route-stack">
-      <div class="page-heading compact-heading">
-        <span class="eyebrow">Setup</span>
-        <h2>Onboarding complete</h2>
-        <p>The owner account exists. Configuration can be revised from Settings.</p>
-      </div>
-      <section class="form-panel completion-panel">
-        <div class="avatar-row">
-          <span class="account-avatar">${escapeHtml(ownerInitials())}</span>
-          <div>
-            <span class="eyebrow">Owner account</span>
-            <h3>${escapeHtml(owner?.email || "Configured")}</h3>
-          </div>
-        </div>
-        <div class="form-actions">
-          <a class="primary-action" href="/" data-link>Go to dashboard</a>
-          <a class="secondary-action" href="/settings" data-link>Edit settings</a>
-        </div>
-      </section>
-    </div>
-  `);
 }
 
 function renderOnboarding() {
@@ -592,6 +649,10 @@ function renderOnboardingFields(stepIndex) {
     `;
   }
 
+  if (stepIndex === 6) {
+    return renderTemplateCards(data.email_templates, data.brand_name || "Passport Auth");
+  }
+
   return renderOnboardingReview();
 }
 
@@ -629,7 +690,116 @@ function renderOnboardingReview() {
         <span class="eyebrow">Brand</span>
         <strong>${escapeHtml(data.brand_name || "Passport Auth")}</strong>
       </div>
+      <div>
+        <span class="eyebrow">Templates</span>
+        <strong>${escapeHtml(normalizeEmailTemplates(data.email_templates).length)} email templates ready</strong>
+      </div>
     </div>
+  `;
+}
+
+function renderTemplateCards(templates, brandName) {
+  const normalizedTemplates = normalizeEmailTemplates(templates);
+
+  return `
+    <div class="template-tabs" aria-label="Email template types">
+      ${normalizedTemplates
+        .map(
+          (template) => `
+            <span>
+              <strong>${escapeHtml(template.name)}</strong>
+              <small>${escapeHtml(template.key.replaceAll("_", " "))}</small>
+            </span>
+          `,
+        )
+        .join("")}
+    </div>
+    <div class="template-gallery">
+      ${normalizedTemplates
+        .map((template, index) => renderTemplateCard(template, index, brandName))
+        .join("")}
+    </div>
+  `;
+}
+
+function renderTemplateCard(template, index, brandName) {
+  const accentColor = normalizeHexColor(template.accent_color);
+  const sampleSubject = sampleTemplateText(template.subject, brandName);
+  const sampleHeadline = sampleTemplateText(template.headline, brandName);
+  const sampleBody = sampleTemplateText(template.body, brandName);
+  const sampleButton = sampleTemplateText(template.button_label, brandName);
+
+  return `
+    <section class="template-card">
+      <input name="email_templates.${index}.key" type="hidden" value="${escapeHtml(
+        template.key,
+      )}" />
+      <input name="email_templates.${index}.name" type="hidden" value="${escapeHtml(
+        template.name,
+      )}" />
+      <div class="template-editor">
+        <div class="section-heading">
+          <span class="eyebrow">Template</span>
+          <h3>${escapeHtml(template.name)}</h3>
+        </div>
+        <div class="form-grid">
+          <label class="field">
+            <span>Subject</span>
+            <input name="email_templates.${index}.subject" type="text" value="${escapeHtml(
+              template.subject,
+            )}" />
+          </label>
+          <label class="field">
+            <span>Headline</span>
+            <input name="email_templates.${index}.headline" type="text" value="${escapeHtml(
+              template.headline,
+            )}" />
+          </label>
+          <label class="field">
+            <span>Body</span>
+            <textarea name="email_templates.${index}.body" rows="4">${escapeHtml(
+              template.body,
+            )}</textarea>
+          </label>
+          <div class="form-grid two-columns">
+            <label class="field">
+              <span>Button label</span>
+              <input name="email_templates.${index}.button_label" type="text" value="${escapeHtml(
+                template.button_label,
+              )}" />
+            </label>
+            <label class="field">
+              <span>Accent color</span>
+              <div class="color-field">
+                <input
+                  class="color-text"
+                  name="email_templates.${index}.accent_color"
+                  type="text"
+                  value="${escapeHtml(template.accent_color)}"
+                  data-color-text
+                />
+                <input
+                  class="color-picker"
+                  type="color"
+                  value="${escapeHtml(accentColor)}"
+                  aria-label="Pick ${escapeHtml(template.name)} accent color"
+                  data-color-picker
+                />
+              </div>
+            </label>
+          </div>
+        </div>
+      </div>
+      <article class="template-preview" style="--template-color: ${escapeHtml(accentColor)}">
+        <span class="template-subject">${escapeHtml(sampleSubject)}</span>
+        <div class="template-mail">
+          <span class="template-logo">${escapeHtml((brandName || "PA").slice(0, 2).toUpperCase())}</span>
+          <h4>${escapeHtml(sampleHeadline)}</h4>
+          <p>${escapeHtml(sampleBody)}</p>
+          <strong>${escapeHtml(sampleButton)}</strong>
+        </div>
+      </article>
+    </section>
   `;
 }
 
@@ -992,6 +1162,55 @@ function renderSettings() {
   `);
 }
 
+function renderTemplates() {
+  if (!state.settings && !state.settingsLoading) {
+    void loadSettings();
+  }
+
+  if (!state.settings) {
+    renderAppShell(`
+      <div class="placeholder-view">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Dashboard</span>
+          <h2>Templates</h2>
+          <p>Loading email templates.</p>
+        </div>
+      </div>
+    `);
+    return;
+  }
+
+  const settings = state.settings;
+  const templates = normalizeEmailTemplates(settings.email_templates);
+
+  renderAppShell(`
+    <form class="templates-route" data-form="templates">
+      <header class="settings-intro">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Dashboard</span>
+          <h2>Templates</h2>
+          <p>Customize the HTML email copy for magic links, OTPs, and password resets.</p>
+        </div>
+        <div class="settings-state">
+          <span class="eyebrow">Saved set</span>
+          <strong>${escapeHtml(templates.length)} templates</strong>
+          <small>Placeholders: {{brand_name}}, {{code}}, {{magic_link}}</small>
+        </div>
+      </header>
+
+      ${renderTemplateCards(templates, settings.brand_name || "Passport Auth")}
+
+      ${renderError()}
+      ${renderMessage()}
+      <div class="sticky-actions">
+        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+          ${state.busy ? "Saving..." : "Save templates"}
+        </button>
+      </div>
+    </form>
+  `);
+}
+
 function renderSectionSave(label) {
   return `
     <div class="section-actions">
@@ -1033,7 +1252,8 @@ function render() {
   }
 
   if (path === "/setup") {
-    renderSetup();
+    window.history.replaceState({}, "", "/");
+    renderDashboard();
     return;
   }
 
@@ -1044,6 +1264,11 @@ function render() {
 
   if (path === "/settings") {
     renderSettings();
+    return;
+  }
+
+  if (path === "/templates") {
+    renderTemplates();
     return;
   }
 
@@ -1083,6 +1308,10 @@ function syncOnboardingFromForm(form) {
     if (state.onboardingStep === 3) {
       state.onboarding[method] = checkboxValue(formData, method);
     }
+  }
+
+  if (formData.has("email_templates.0.key")) {
+    state.onboarding.email_templates = readEmailTemplatesFromForm(form);
   }
 }
 
@@ -1131,6 +1360,7 @@ function buildSettingsPayload() {
     magic_link_enabled: data.magic_link_enabled,
     google_oauth_enabled: data.google_oauth_enabled,
     password_reset_otp_enabled: data.password_reset_otp_enabled,
+    email_templates: normalizeEmailTemplates(data.email_templates),
   };
 
   if (data.resend_api_key) {
@@ -1172,7 +1402,7 @@ async function completeOnboarding() {
       method: "PUT",
       body: JSON.stringify(buildSettingsPayload()),
     });
-    state.onboarding = { ...defaultOnboarding };
+    state.onboarding = { ...defaultOnboarding, email_templates: cloneEmailTemplates() };
     state.onboardingStep = 0;
     window.history.replaceState({}, "", "/");
   } catch (error) {
@@ -1330,6 +1560,30 @@ async function handleSettingsSubmit(form) {
   }
 }
 
+async function handleTemplatesSubmit(form) {
+  const payload = {
+    email_templates: readEmailTemplatesFromForm(form),
+  };
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    state.settings = await api("/api/v1/dashboard/settings", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    state.message = "Templates saved.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
 app.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.target;
@@ -1349,6 +1603,9 @@ app.addEventListener("submit", (event) => {
   }
   if (formName === "settings") {
     void handleSettingsSubmit(form);
+  }
+  if (formName === "templates") {
+    void handleTemplatesSubmit(form);
   }
 });
 

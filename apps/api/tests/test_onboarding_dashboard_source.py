@@ -20,7 +20,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-02-color-picker" in index_html
+    assert "2026-06-02-templates" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -47,3 +47,24 @@ def test_branding_settings_include_color_picker() -> None:
     assert "data-color-picker" in app_js
     assert "data-color-text" in app_js
     assert "color-field" in styles_css
+
+
+def test_completed_setup_route_is_removed_from_signed_in_dashboard() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert '{ href: "/setup", label: "Setup" }' not in app_js
+    assert "renderSetupComplete" not in app_js
+    assert "Onboarding complete" not in app_js
+    assert '{ href: "/templates", label: "Templates" }' in app_js
+
+
+def test_dashboard_contains_email_templates_page() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "renderTemplates" in app_js
+    assert "email_templates" in app_js
+    assert "Magic link" in app_js
+    assert "Password reset OTP" in app_js
+    assert "template-preview" in styles_css
+    assert "template-tabs" in styles_css
