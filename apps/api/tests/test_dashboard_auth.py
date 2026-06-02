@@ -3,7 +3,7 @@ from httpx import ASGITransport, AsyncClient
 
 from passport_auth.core.config import Settings
 from passport_auth.main import create_app
-from passport_auth.setup.store import InMemorySetupStore
+from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
 
 def create_test_app() -> tuple[InMemorySetupStore, object]:
@@ -138,6 +138,30 @@ async def test_password_reset_otp_can_be_disabled() -> None:
             app_encryption_key="test-jwt-secret",
             password_reset_otp_enabled=False,
         )
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/dashboard/auth/password-reset/start",
+            json={"email": "owner@example.com"},
+        )
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Password reset is disabled."}
+
+
+@pytest.mark.asyncio
+async def test_password_reset_otp_can_be_disabled_from_dashboard_settings() -> None:
+    setup_store = InMemorySetupStore()
+    setup_store.create_owner(
+        email="owner@example.com",
+        password="correct-horse-battery-staple",
+    )
+    setup_store.save_dashboard_settings(DashboardSettings(password_reset_otp_enabled=False))
+    app = create_app(
+        settings=Settings(app_encryption_key="test-jwt-secret"),
+        setup_store=setup_store,
     )
     transport = ASGITransport(app=app)
 

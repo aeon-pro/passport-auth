@@ -4,6 +4,8 @@ const app = document.querySelector("#app");
 const state = {
   setup: null,
   user: null,
+  settings: null,
+  settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
   resetEmail: "",
@@ -27,6 +29,14 @@ const metrics = [
   { label: "Events", value: "0", detail: "Last 24 hours" },
 ];
 
+const authMethodLabels = {
+  password_login_enabled: "Password login",
+  otp_login_enabled: "OTP login",
+  magic_link_enabled: "Magic link",
+  google_oauth_enabled: "Google OAuth",
+  password_reset_otp_enabled: "Password reset OTP",
+};
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -34,6 +44,32 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function linesToList(value) {
+  return String(value || "")
+    .split(/\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function listToLines(value) {
+  return (value || []).join("\n");
+}
+
+function checkboxValue(formData, name) {
+  return formData.get(name) === "on";
+}
+
+function ensureOrigin(domain) {
+  const cleanDomain = String(domain || "").trim();
+  if (!cleanDomain) {
+    return "";
+  }
+  if (cleanDomain.startsWith("http://") || cleanDomain.startsWith("https://")) {
+    return cleanDomain.replace(/\/+$/, "");
+  }
+  return `https://${cleanDomain.replace(/\/+$/, "")}`;
 }
 
 async function api(path, options = {}) {
@@ -70,6 +106,30 @@ async function loadProfile() {
     localStorage.removeItem(TOKEN_KEY);
     state.token = null;
     state.user = null;
+  }
+}
+
+async function loadSettings({ quiet = false } = {}) {
+  if (!state.token || state.settingsLoading) {
+    return;
+  }
+
+  state.settingsLoading = true;
+  if (!quiet) {
+    render();
+  }
+
+  try {
+    state.settings = await api("/api/v1/dashboard/settings");
+  } catch (error) {
+    if (!quiet) {
+      state.error = error.message;
+    }
+  } finally {
+    state.settingsLoading = false;
+    if (!quiet) {
+      render();
+    }
   }
 }
 
@@ -296,13 +356,36 @@ function renderAuth() {
   `;
 }
 
+function dashboardMetrics() {
+  if (!state.settings) {
+    return metrics;
+  }
+
+  const enabledMethods = Object.keys(authMethodLabels).filter((key) => state.settings[key]);
+  const domainCount = [
+    state.settings.app_domain,
+    state.settings.auth_domain,
+    ...(state.settings.allowed_origins || []),
+    ...(state.settings.redirect_urls || []),
+  ].filter(Boolean).length;
+
+  return [
+    { label: "Domains", value: String(domainCount), detail: "Origins and redirects" },
+    { label: "Providers", value: String(enabledMethods.length), detail: "Enabled methods" },
+    { label: "API keys", value: "0", detail: "Service access" },
+    { label: "Events", value: "0", detail: "Last 24 hours" },
+  ];
+}
+
 function renderDashboard() {
+  const readySettings = state.settings || {};
   const setupItems = [
     { label: "Owner account", complete: setupComplete() },
-    { label: "Auth domain", complete: false },
-    { label: "Redirect URLs", complete: false },
-    { label: "Email provider", complete: false },
+    { label: "Auth domain", complete: Boolean(readySettings.auth_domain) },
+    { label: "Redirect URLs", complete: Boolean(readySettings.redirect_urls?.length) },
+    { label: "Email provider", complete: Boolean(readySettings.resend_configured) },
   ];
+  const visibleMetrics = dashboardMetrics();
 
   renderAppShell(`
     <div class="hero">
@@ -323,7 +406,7 @@ function renderDashboard() {
       </div>
     </div>
     <div class="metric-grid" aria-label="Auth readiness">
-      ${metrics
+      ${visibleMetrics
         .map(
           (metric) => `
             <div class="metric">
@@ -350,6 +433,171 @@ function renderPlaceholder(title, body) {
         <p class="form-message">This section is ready for the next feature commit.</p>
       </div>
     </div>
+  `);
+}
+
+function renderSettings() {
+  if (!state.settings && !state.settingsLoading) {
+    void loadSettings();
+  }
+
+  if (!state.settings) {
+    renderAppShell(`
+      <div class="placeholder-view">
+        <div class="page-heading">
+          <span class="eyebrow">Dashboard</span>
+          <h2>Settings</h2>
+          <p>Loading saved configuration.</p>
+        </div>
+      </div>
+    `);
+    return;
+  }
+
+  const settings = state.settings;
+  const googleOrigin = ensureOrigin(settings.auth_domain || settings.app_domain);
+  const googleRedirectUrl = googleOrigin
+    ? `${googleOrigin}/api/v1/auth/google/callback`
+    : "https://auth.example.com/api/v1/auth/google/callback";
+
+  renderAppShell(`
+    <form class="route-stack settings-route" data-form="settings">
+      <div class="page-heading">
+        <span class="eyebrow">Dashboard</span>
+        <h2>Settings</h2>
+        <p>Configure domains, redirect URLs, Resend, Google OAuth, branding, and auth methods.</p>
+      </div>
+
+      <section class="settings-section">
+        <div class="section-heading">
+          <span class="eyebrow">Domains</span>
+          <h3>Public URLs</h3>
+        </div>
+        <div class="form-grid two-columns">
+          <label class="field">
+            <span>Application domain</span>
+            <input name="app_domain" type="text" value="${escapeHtml(settings.app_domain)}" placeholder="app.example.com" />
+          </label>
+          <label class="field">
+            <span>Auth domain</span>
+            <input name="auth_domain" type="text" value="${escapeHtml(settings.auth_domain)}" placeholder="auth.example.com" />
+          </label>
+          <label class="field">
+            <span>Allowed origins</span>
+            <textarea name="allowed_origins" rows="4" placeholder="https://app.example.com">${escapeHtml(
+              listToLines(settings.allowed_origins),
+            )}</textarea>
+          </label>
+          <label class="field">
+            <span>Redirect URLs</span>
+            <textarea name="redirect_urls" rows="4" placeholder="https://app.example.com/auth/callback">${escapeHtml(
+              listToLines(settings.redirect_urls),
+            )}</textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="section-heading">
+          <span class="eyebrow">Email</span>
+          <h3>Resend</h3>
+        </div>
+        <div class="form-grid two-columns">
+          <label class="field">
+            <span>From email</span>
+            <input name="resend_from_email" type="text" value="${escapeHtml(
+              settings.resend_from_email,
+            )}" placeholder="Passport Auth <auth@example.com>" />
+          </label>
+          <label class="field">
+            <span>API key</span>
+            <input name="resend_api_key" type="password" placeholder="${
+              settings.resend_configured ? "Configured" : "re_..."
+            }" />
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="section-heading">
+          <span class="eyebrow">OAuth</span>
+          <h3>Google</h3>
+        </div>
+        <div class="form-grid two-columns">
+          <label class="field">
+            <span>Client ID</span>
+            <input name="google_client_id" type="text" value="${escapeHtml(
+              settings.google_client_id,
+            )}" placeholder="000000000000-example.apps.googleusercontent.com" />
+          </label>
+          <label class="field">
+            <span>Client secret</span>
+            <input name="google_client_secret" type="password" placeholder="${
+              settings.google_configured ? "Configured" : "GOCSPX-..."
+            }" />
+          </label>
+        </div>
+        <div class="guidance">
+          <div>
+            <span>Authorized JavaScript origin</span>
+            <code>${escapeHtml(googleOrigin || "https://auth.example.com")}</code>
+          </div>
+          <div>
+            <span>Authorized redirect URI</span>
+            <code>${escapeHtml(googleRedirectUrl)}</code>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="section-heading">
+          <span class="eyebrow">Branding</span>
+          <h3>Identity</h3>
+        </div>
+        <div class="form-grid two-columns">
+          <label class="field">
+            <span>Brand name</span>
+            <input name="brand_name" type="text" value="${escapeHtml(
+              settings.brand_name,
+            )}" placeholder="Passport Auth" />
+          </label>
+          <label class="field">
+            <span>Primary color</span>
+            <input name="primary_color" type="text" value="${escapeHtml(
+              settings.primary_color,
+            )}" placeholder="#f5f5f7" />
+          </label>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <div class="section-heading">
+          <span class="eyebrow">Methods</span>
+          <h3>Auth toggles</h3>
+        </div>
+        <div class="toggle-grid">
+          ${Object.entries(authMethodLabels)
+            .map(
+              ([name, label]) => `
+                <label class="toggle-row">
+                  <input name="${name}" type="checkbox" ${settings[name] ? "checked" : ""} />
+                  <span class="toggle-control" aria-hidden="true"></span>
+                  <span>${label}</span>
+                </label>
+              `,
+            )
+            .join("")}
+        </div>
+      </section>
+
+      ${renderError()}
+      ${renderMessage()}
+      <div class="form-actions sticky-actions">
+        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+          ${state.busy ? "Saving..." : "Save settings"}
+        </button>
+      </div>
+    </form>
   `);
 }
 
@@ -393,7 +641,7 @@ function render() {
   }
 
   if (path === "/settings") {
-    renderPlaceholder("Settings", "Configure domains, redirect URLs, Resend, Google OAuth, and branding.");
+    renderSettings();
     return;
   }
 
@@ -455,6 +703,7 @@ async function handleLoginSubmit(form) {
     state.token = login.access_token;
     state.user = login.user;
     localStorage.setItem(TOKEN_KEY, state.token);
+    await loadSettings({ quiet: true });
     window.history.replaceState({}, "", "/");
   } catch (error) {
     state.error = error.message;
@@ -515,6 +764,52 @@ async function handleResetConfirm(form) {
   }
 }
 
+async function handleSettingsSubmit(form) {
+  const formData = new FormData(form);
+  const payload = {
+    app_domain: String(formData.get("app_domain") || "").trim(),
+    auth_domain: String(formData.get("auth_domain") || "").trim(),
+    allowed_origins: linesToList(formData.get("allowed_origins")),
+    redirect_urls: linesToList(formData.get("redirect_urls")),
+    resend_from_email: String(formData.get("resend_from_email") || "").trim(),
+    google_client_id: String(formData.get("google_client_id") || "").trim(),
+    brand_name: String(formData.get("brand_name") || "").trim() || "Passport Auth",
+    primary_color: String(formData.get("primary_color") || "").trim() || "#f5f5f7",
+    password_login_enabled: checkboxValue(formData, "password_login_enabled"),
+    otp_login_enabled: checkboxValue(formData, "otp_login_enabled"),
+    magic_link_enabled: checkboxValue(formData, "magic_link_enabled"),
+    google_oauth_enabled: checkboxValue(formData, "google_oauth_enabled"),
+    password_reset_otp_enabled: checkboxValue(formData, "password_reset_otp_enabled"),
+  };
+  const resendApiKey = String(formData.get("resend_api_key") || "").trim();
+  const googleClientSecret = String(formData.get("google_client_secret") || "").trim();
+
+  if (resendApiKey) {
+    payload.resend_api_key = resendApiKey;
+  }
+  if (googleClientSecret) {
+    payload.google_client_secret = googleClientSecret;
+  }
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    state.settings = await api("/api/v1/dashboard/settings", {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    });
+    state.message = "Settings saved.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
 app.addEventListener("submit", (event) => {
   event.preventDefault();
   const form = event.target;
@@ -531,6 +826,9 @@ app.addEventListener("submit", (event) => {
   }
   if (formName === "reset-confirm") {
     void handleResetConfirm(form);
+  }
+  if (formName === "settings") {
+    void handleSettingsSubmit(form);
   }
 });
 
@@ -551,6 +849,7 @@ app.addEventListener("click", (event) => {
     localStorage.removeItem(TOKEN_KEY);
     state.token = null;
     state.user = null;
+    state.settings = null;
     state.authMode = "login";
     state.message = "";
     state.error = "";
@@ -582,6 +881,9 @@ async function boot() {
     await loadSetupStatus();
     if (setupComplete()) {
       await loadProfile();
+      if (state.user) {
+        await loadSettings({ quiet: true });
+      }
     }
   } catch (error) {
     state.error = error.message;

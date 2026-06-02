@@ -1,10 +1,12 @@
-from dataclasses import dataclass
+import json
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from threading import Lock
 from typing import Protocol
 from uuid import uuid4
 
 from passport_auth.setup.passwords import hash_password, verify_password
+from passport_auth.setup.secrets import decrypt_secret, encrypt_secret
 
 
 class SetupAlreadyCompleteError(Exception):
@@ -25,6 +27,25 @@ class PasswordResetOtp:
     expires_at: int
 
 
+@dataclass(frozen=True)
+class DashboardSettings:
+    app_domain: str = ""
+    auth_domain: str = ""
+    allowed_origins: tuple[str, ...] = ()
+    redirect_urls: tuple[str, ...] = ()
+    resend_from_email: str = ""
+    resend_api_key: str | None = None
+    google_client_id: str = ""
+    google_client_secret: str | None = None
+    brand_name: str = "Passport Auth"
+    primary_color: str = "#f5f5f7"
+    password_login_enabled: bool = True
+    otp_login_enabled: bool = False
+    magic_link_enabled: bool = False
+    google_oauth_enabled: bool = False
+    password_reset_otp_enabled: bool = True
+
+
 class SetupStore(Protocol):
     def get_owner(self) -> OwnerAccount | None: ...
 
@@ -38,11 +59,16 @@ class SetupStore(Protocol):
 
     def consume_password_reset_otp(self, *, email: str, otp: str, now: int) -> bool: ...
 
+    def get_dashboard_settings(self) -> DashboardSettings: ...
+
+    def save_dashboard_settings(self, settings: DashboardSettings) -> DashboardSettings: ...
+
 
 class InMemorySetupStore:
     def __init__(self) -> None:
         self.owner: OwnerAccount | None = None
         self.password_reset_otps: dict[str, PasswordResetOtp] = {}
+        self.dashboard_settings = DashboardSettings()
 
     def get_owner(self) -> OwnerAccount | None:
         return self.owner
@@ -87,10 +113,18 @@ class InMemorySetupStore:
         del self.password_reset_otps[email]
         return True
 
+    def get_dashboard_settings(self) -> DashboardSettings:
+        return self.dashboard_settings
+
+    def save_dashboard_settings(self, settings: DashboardSettings) -> DashboardSettings:
+        self.dashboard_settings = settings
+        return settings
+
 
 class PostgresSetupStore:
-    def __init__(self, database_url: str) -> None:
+    def __init__(self, database_url: str, *, encryption_key: str) -> None:
         self.database_url = database_url
+        self.encryption_key = encryption_key
         self._schema_lock = Lock()
         self._schema_ready = False
 
@@ -218,6 +252,48 @@ class PostgresSetupStore:
                 )
                 return True
 
+    def get_dashboard_settings(self) -> DashboardSettings:
+        self._ensure_schema()
+
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT value::text
+                FROM app_settings
+                WHERE key = 'dashboard'
+                LIMIT 1
+                """
+            ).fetchone()
+
+        if not row:
+            return DashboardSettings()
+
+        return dashboard_settings_from_storage_dict(
+            json.loads(row[0]),
+            encryption_key=self.encryption_key,
+        )
+
+    def save_dashboard_settings(self, settings: DashboardSettings) -> DashboardSettings:
+        self._ensure_schema()
+        settings_json = json.dumps(
+            dashboard_settings_to_storage_dict(settings, encryption_key=self.encryption_key)
+        )
+
+        with self._connect() as conn:
+            with conn.transaction():
+                conn.execute(
+                    """
+                    INSERT INTO app_settings (key, value, updated_at)
+                    VALUES ('dashboard', %s::jsonb, now())
+                    ON CONFLICT (key) DO UPDATE
+                    SET value = EXCLUDED.value,
+                        updated_at = now()
+                    """,
+                    (settings_json,),
+                )
+
+        return settings
+
     def _ensure_schema(self) -> None:
         if self._schema_ready:
             return
@@ -264,6 +340,15 @@ class PostgresSetupStore:
                         ON password_reset_otps (email, created_at DESC)
                         """
                     )
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS app_settings (
+                            key TEXT PRIMARY KEY,
+                            value JSONB NOT NULL,
+                            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                        )
+                        """
+                    )
 
             self._schema_ready = True
 
@@ -273,8 +358,84 @@ class PostgresSetupStore:
         return psycopg.connect(self.database_url)
 
 
-def create_setup_store(database_url: str | None) -> SetupStore:
+def create_setup_store(database_url: str | None, *, encryption_key: str) -> SetupStore:
     if database_url:
-        return PostgresSetupStore(database_url)
+        return PostgresSetupStore(database_url, encryption_key=encryption_key)
 
     return InMemorySetupStore()
+
+
+def dashboard_settings_to_dict(settings: DashboardSettings) -> dict[str, object]:
+    data = asdict(settings)
+    data["allowed_origins"] = list(settings.allowed_origins)
+    data["redirect_urls"] = list(settings.redirect_urls)
+    return data
+
+
+def dashboard_settings_from_dict(data: dict[str, object]) -> DashboardSettings:
+    defaults = DashboardSettings()
+    merged = dashboard_settings_to_dict(defaults)
+    merged.update(data)
+    return DashboardSettings(
+        app_domain=str(merged["app_domain"]),
+        auth_domain=str(merged["auth_domain"]),
+        allowed_origins=_string_tuple(merged["allowed_origins"]),
+        redirect_urls=_string_tuple(merged["redirect_urls"]),
+        resend_from_email=str(merged["resend_from_email"]),
+        resend_api_key=_optional_string(merged["resend_api_key"]),
+        google_client_id=str(merged["google_client_id"]),
+        google_client_secret=_optional_string(merged["google_client_secret"]),
+        brand_name=str(merged["brand_name"]),
+        primary_color=str(merged["primary_color"]),
+        password_login_enabled=bool(merged["password_login_enabled"]),
+        otp_login_enabled=bool(merged["otp_login_enabled"]),
+        magic_link_enabled=bool(merged["magic_link_enabled"]),
+        google_oauth_enabled=bool(merged["google_oauth_enabled"]),
+        password_reset_otp_enabled=bool(merged["password_reset_otp_enabled"]),
+    )
+
+
+def _string_tuple(value: object) -> tuple[str, ...]:
+    if not isinstance(value, list | tuple):
+        return ()
+
+    return tuple(str(item).strip() for item in value if str(item).strip())
+
+
+def _optional_string(value: object) -> str | None:
+    if value is None:
+        return None
+
+    cleaned = str(value).strip()
+    return cleaned or None
+
+
+def dashboard_settings_to_storage_dict(
+    settings: DashboardSettings,
+    *,
+    encryption_key: str,
+) -> dict[str, object]:
+    data = dashboard_settings_to_dict(settings)
+    data["resend_api_key"] = encrypt_secret(settings.resend_api_key, encryption_key=encryption_key)
+    data["google_client_secret"] = encrypt_secret(
+        settings.google_client_secret,
+        encryption_key=encryption_key,
+    )
+    return data
+
+
+def dashboard_settings_from_storage_dict(
+    data: dict[str, object],
+    *,
+    encryption_key: str,
+) -> DashboardSettings:
+    decrypted = data.copy()
+    decrypted["resend_api_key"] = decrypt_secret(
+        _optional_string(decrypted.get("resend_api_key")),
+        encryption_key=encryption_key,
+    )
+    decrypted["google_client_secret"] = decrypt_secret(
+        _optional_string(decrypted.get("google_client_secret")),
+        encryption_key=encryption_key,
+    )
+    return dashboard_settings_from_dict(decrypted)

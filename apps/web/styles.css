@@ -22,7 +22,8 @@ body {
 }
 
 button,
-input {
+input,
+textarea {
   font: inherit;
 }
 
@@ -151,6 +152,7 @@ small {
 
 .topbar-meta,
 .panel-heading,
+.section-heading,
 .page-heading {
   display: grid;
   gap: 6px;
@@ -258,7 +260,8 @@ p {
 .auth-card,
 .panel,
 .metric,
-.form-panel {
+.form-panel,
+.settings-section {
   border: 1px solid #252529;
   border-radius: 8px;
   background: #0b0b0d;
@@ -266,7 +269,8 @@ p {
 
 .auth-card,
 .panel,
-.form-panel {
+.form-panel,
+.settings-section {
   display: grid;
   gap: 22px;
   padding: 22px;
@@ -386,6 +390,10 @@ p {
   gap: 16px;
 }
 
+.form-grid.two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -394,7 +402,8 @@ p {
   font-weight: 500;
 }
 
-.field input {
+.field input,
+.field textarea {
   min-height: 44px;
   width: 100%;
   border: 1px solid #2a2a2f;
@@ -404,11 +413,19 @@ p {
   padding: 0 12px;
 }
 
-.field input::placeholder {
+.field textarea {
+  min-height: 108px;
+  padding: 12px;
+  resize: vertical;
+}
+
+.field input::placeholder,
+.field textarea::placeholder {
   color: #5f5f67;
 }
 
-.field input:focus {
+.field input:focus,
+.field textarea:focus {
   border-color: #6a6a72;
   outline: none;
 }
@@ -465,6 +482,108 @@ p {
   max-width: 720px;
 }
 
+.settings-route {
+  max-width: 900px;
+}
+
+.guidance {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #242429;
+  border-radius: 8px;
+  background: #050506;
+  padding: 14px;
+}
+
+.guidance div {
+  display: grid;
+  gap: 6px;
+}
+
+.guidance span {
+  color: #77777f;
+  font-size: 11px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.guidance code {
+  overflow-wrap: anywhere;
+  color: #f5f5f7;
+  font-family: "SF Mono", Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+
+.toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.toggle-row {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #242429;
+  border-radius: 8px;
+  background: #050506;
+  color: #d6d6db;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.toggle-row input {
+  position: absolute;
+  opacity: 0;
+}
+
+.toggle-control {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 auto;
+  border: 1px solid #34343a;
+  border-radius: 999px;
+  background: #151518;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease;
+}
+
+.toggle-control::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: #8a8a92;
+  content: "";
+  transition:
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.toggle-row input:checked + .toggle-control {
+  border-color: #335f43;
+  background: #0d2a19;
+}
+
+.toggle-row input:checked + .toggle-control::after {
+  background: #73f6a4;
+  transform: translateX(14px);
+}
+
+.toggle-row:has(input:focus-visible) {
+  border-color: #6a6a72;
+}
+
+.sticky-actions {
+  padding-bottom: 16px;
+}
+
 @media (max-width: 960px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -512,7 +631,9 @@ p {
   }
 
   .metric-grid,
-  .nav {
+  .nav,
+  .form-grid.two-columns,
+  .toggle-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -520,5 +641,10 @@ p {
 @media (max-width: 520px) {
   .form-actions {
     display: grid;
+  }
+
+  .form-grid.two-columns,
+  .toggle-grid {
+    grid-template-columns: 1fr;
   }
 }

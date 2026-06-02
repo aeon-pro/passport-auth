@@ -136,7 +136,8 @@ def start_password_reset(
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> PasswordResetStartResponse:
-    if not settings.password_reset_otp_enabled:
+    dashboard_settings = setup_store.get_dashboard_settings()
+    if not settings.password_reset_otp_enabled or not dashboard_settings.password_reset_otp_enabled:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Password reset is disabled.",

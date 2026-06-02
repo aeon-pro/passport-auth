@@ -18,7 +18,10 @@ def create_app(
 
     resolved_settings = settings or get_settings()
     app.state.settings = resolved_settings
-    app.state.setup_store = setup_store or create_setup_store(resolved_settings.database_url)
+    app.state.setup_store = setup_store or create_setup_store(
+        resolved_settings.database_url,
+        encryption_key=resolved_settings.app_encryption_key,
+    )
     app.include_router(api_v1_router)
 
     dashboard_static_dir = static_dir or resolved_settings.web_static_dir
