@@ -12,3 +12,14 @@ def test_static_dashboard_contains_multi_step_onboarding() -> None:
     assert "Complete setup" in app_js
     assert "onboarding-layout" in styles_css
     assert "step-rail" in styles_css
+
+
+def test_static_dashboard_uses_obsidian_control_room_design() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "shell-rail" in app_js
+    assert "command-surface" in app_js
+    assert "settings-matrix" in app_js
+    assert "obsidian-grid" in styles_css
+    assert "kinetic-line" in styles_css

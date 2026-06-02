@@ -278,9 +278,9 @@ function renderAppShell(content) {
     ? `<button class="text-action" type="button" data-action="sign-out">Sign out</button>`
     : `<a class="text-action" href="/" data-link>Sign in</a>`;
 
-  app.className = "app-shell";
+  app.className = "app-shell obsidian-grid";
   app.innerHTML = `
-    <aside class="sidebar" aria-label="Workspace">
+    <aside class="shell-rail sidebar" aria-label="Workspace">
       ${brandMarkup()}
       <nav class="nav" aria-label="Primary">
         ${routes
@@ -296,7 +296,7 @@ function renderAppShell(content) {
     </aside>
 
     <main class="content">
-      <header class="topbar">
+      <header class="command-bar topbar">
         <div class="topbar-meta">
           <span class="eyebrow">Environment</span>
           <strong>Local</strong>
@@ -307,7 +307,7 @@ function renderAppShell(content) {
           ${authAction}
         </div>
       </header>
-      <section class="workspace">${content}</section>
+      <section class="workspace command-surface">${content}</section>
     </main>
   `;
 }
@@ -354,7 +354,7 @@ function renderOnboarding() {
   const canGoBack = state.onboardingStep > 0;
 
   renderAppShell(`
-    <form class="onboarding-layout" data-form="onboarding">
+    <form class="onboarding-layout onboarding-command" data-form="onboarding">
       <aside class="step-rail" aria-label="Onboarding steps">
         <span class="eyebrow">First run</span>
         <h2>Configure Passport Auth</h2>
@@ -739,13 +739,13 @@ function renderDashboard() {
   const visibleMetrics = dashboardMetrics();
 
   renderAppShell(`
-    <div class="hero">
+    <div class="hero dashboard-command">
       <div class="page-heading compact-heading">
         <span class="eyebrow">Dashboard</span>
         <h2>Auth control plane</h2>
         <p>Hosted pages, public APIs, dashboard controls, and service keys behind one web service.</p>
       </div>
-      <div class="panel">
+      <div class="panel readiness-card">
         <div class="panel-heading">
           <span class="eyebrow">Setup state</span>
           <h3>Owner configured</h3>
@@ -756,7 +756,7 @@ function renderDashboard() {
         <a class="primary-action" href="/settings" data-link>Edit settings</a>
       </div>
     </div>
-    <div class="metric-grid" aria-label="Auth readiness">
+    <div class="metric-grid signal-grid" aria-label="Auth readiness">
       ${visibleMetrics
         .map(
           (metric) => `
@@ -812,12 +812,19 @@ function renderSettings() {
     : "https://auth.example.com/api/v1/auth/google/callback";
 
   renderAppShell(`
-    <form class="route-stack settings-route" data-form="settings">
-      <div class="page-heading compact-heading">
-        <span class="eyebrow">Dashboard</span>
-        <h2>Settings</h2>
-        <p>Configure domains, redirect URLs, Resend, Google OAuth, branding, and auth methods.</p>
-      </div>
+    <form class="settings-route settings-matrix" data-form="settings">
+      <header class="settings-intro">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Dashboard</span>
+          <h2>Settings</h2>
+          <p>Configure domains, redirect URLs, Resend, Google OAuth, branding, and auth methods.</p>
+        </div>
+        <div class="settings-state">
+          <span class="eyebrow">Control surface</span>
+          <strong>${escapeHtml(settings.brand_name || "Passport Auth")}</strong>
+          <small>${escapeHtml(settings.auth_domain || "Auth domain pending")}</small>
+        </div>
+      </header>
 
       <section class="settings-section">
         <div class="section-heading">
