@@ -175,6 +175,11 @@ function ensureOrigin(domain) {
   return `https://${cleanDomain.replace(/\/+$/, "")}`;
 }
 
+function normalizeHexColor(value) {
+  const color = String(value || "").trim();
+  return /^#[0-9a-fA-F]{6}$/.test(color) ? color : "#f5f5f7";
+}
+
 function ownerInitials() {
   return state.user?.email?.slice(0, 2).toUpperCase() || "PA";
 }
@@ -558,12 +563,26 @@ function renderOnboardingFields(stepIndex) {
         </label>
         <label class="field">
           <span>Primary color</span>
-          <input name="primary_color" type="text" value="${escapeHtml(
-            data.primary_color,
-          )}" placeholder="#f5f5f7" />
+          <div class="color-field">
+            <input
+              class="color-text"
+              name="primary_color"
+              type="text"
+              value="${escapeHtml(data.primary_color)}"
+              placeholder="#f5f5f7"
+              data-color-text
+            />
+            <input
+              class="color-picker"
+              type="color"
+              value="${escapeHtml(normalizeHexColor(data.primary_color))}"
+              aria-label="Pick primary color"
+              data-color-picker
+            />
+          </div>
         </label>
       </div>
-      <div class="brand-preview" style="--preview-color: ${escapeHtml(data.primary_color)}">
+      <div class="brand-preview" style="--preview-color: ${escapeHtml(normalizeHexColor(data.primary_color))}">
         <span class="brand-preview-mark">PA</span>
         <div>
           <strong>${escapeHtml(data.brand_name || "Passport Auth")}</strong>
@@ -924,9 +943,23 @@ function renderSettings() {
           </label>
           <label class="field">
             <span>Primary color</span>
-            <input name="primary_color" type="text" value="${escapeHtml(
-              settings.primary_color,
-            )}" placeholder="#f5f5f7" />
+            <div class="color-field">
+              <input
+                class="color-text"
+                name="primary_color"
+                type="text"
+                value="${escapeHtml(settings.primary_color)}"
+                placeholder="#f5f5f7"
+                data-color-text
+              />
+              <input
+                class="color-picker"
+                type="color"
+                value="${escapeHtml(normalizeHexColor(settings.primary_color))}"
+                aria-label="Pick primary color"
+                data-color-picker
+              />
+            </div>
           </label>
           ${renderSectionSave("branding")}
         </div>
@@ -1316,6 +1349,34 @@ app.addEventListener("submit", (event) => {
   }
   if (formName === "settings") {
     void handleSettingsSubmit(form);
+  }
+});
+
+app.addEventListener("input", (event) => {
+  const picker = event.target.closest("[data-color-picker]");
+  if (picker) {
+    const colorField = picker.closest(".color-field");
+    const textInput = colorField?.querySelector("[data-color-text]");
+    if (textInput) {
+      textInput.value = picker.value;
+    }
+    return;
+  }
+
+  const colorText = event.target.closest("[data-color-text]");
+  if (!colorText) {
+    return;
+  }
+
+  const typedColor = String(colorText.value || "").trim();
+  if (!/^#[0-9a-fA-F]{6}$/.test(typedColor)) {
+    return;
+  }
+
+  const colorField = colorText.closest(".color-field");
+  const pickerInput = colorField?.querySelector("[data-color-picker]");
+  if (pickerInput) {
+    pickerInput.value = typedColor;
   }
 });
 

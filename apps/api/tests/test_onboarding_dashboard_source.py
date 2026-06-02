@@ -20,7 +20,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-02-control-room" in index_html
+    assert "2026-06-02-color-picker" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -37,3 +37,13 @@ def test_settings_sections_have_local_save_actions_and_centered_toggles() -> Non
     assert 'renderSectionSave("URLs")' in app_js
     assert "translateY(-50%)" in styles_css
     assert "translate(18px, -50%)" in styles_css
+
+
+def test_branding_settings_include_color_picker() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert 'type="color"' in app_js
+    assert "data-color-picker" in app_js
+    assert "data-color-text" in app_js
+    assert "color-field" in styles_css

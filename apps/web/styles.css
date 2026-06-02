@@ -539,6 +539,33 @@ p {
   outline: none;
 }
 
+.color-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 52px;
+  gap: 10px;
+  align-items: center;
+}
+
+.field .color-picker {
+  min-height: 45px;
+  padding: 4px;
+  cursor: pointer;
+}
+
+.field .color-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.field .color-picker::-webkit-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
+.field .color-picker::-moz-color-swatch {
+  border: 0;
+  border-radius: 5px;
+}
+
 .form-actions {
   display: flex;
   align-items: center;
