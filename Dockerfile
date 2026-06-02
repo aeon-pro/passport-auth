@@ -1,13 +1,5 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:24-alpine AS web-builder
-
-WORKDIR /workspace/apps/web
-COPY apps/web/package*.json ./
-RUN npm ci
-COPY apps/web ./
-RUN npm run build
-
 FROM python:3.13-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -21,7 +13,7 @@ COPY apps/api ./apps/api
 RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir ./apps/api
 
-COPY --from=web-builder /workspace/apps/web/dist ./static
+COPY apps/web ./static
 
 EXPOSE 8000
 

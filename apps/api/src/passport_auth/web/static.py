@@ -21,4 +21,10 @@ def mount_dashboard(app: FastAPI, static_dir: str | Path) -> None:
     def dashboard(path: str = "") -> FileResponse:
         if path.startswith("api/"):
             raise HTTPException(status_code=404, detail="Not found")
+
+        requested_path = (static_path / path).resolve()
+        static_root = static_path.resolve()
+        if requested_path.is_file() and requested_path.is_relative_to(static_root):
+            return FileResponse(requested_path)
+
         return FileResponse(index_path)

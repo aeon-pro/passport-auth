@@ -1,14 +1,14 @@
 # Passport Auth
 
-Passport Auth is a deploy-per-app authentication service. The V1 target is a FastAPI modular monolith with a React dashboard served by the same public web container.
+Passport Auth is a deploy-per-app authentication service. The V1 target is a FastAPI modular monolith with a plain HTML/CSS/JS dashboard served by the same public web container.
 
 ## V1 Shape
 
-- One public service serves `/api/v1/*`, hosted auth pages, and the built dashboard.
+- One public service serves `/api/v1/*`, hosted auth pages, and the static dashboard.
 - Postgres stores product data, encrypted provider settings, audit logs, and token hashes.
 - Redis handles rate limits, short-lived codes, OTP throttling, replay guards, and session guards.
 - ClickHouse stores public auth analytics events with a 12-month raw retention target.
-- React powers the setup flow and admin dashboard.
+- Plain HTML, CSS, and JavaScript power the setup flow and admin dashboard.
 - Resend is used for OTP, magic-link, verification, and password-reset email delivery.
 
 ## Planned Repository Layout
@@ -16,7 +16,7 @@ Passport Auth is a deploy-per-app authentication service. The V1 target is a Fas
 ```text
 apps/
   api/        FastAPI application and backend tests
-  web/        React dashboard and hosted auth screens
+  web/        Static dashboard and hosted auth screens
 Dockerfile   Production web image
 compose.yaml Local and Coolify Compose stack
 docs/
@@ -39,12 +39,7 @@ python3 -m venv .venv
 
 ### Frontend
 
-```bash
-cd apps/web
-npm install
-npm test
-npm run build
-```
+The dashboard is plain static HTML, CSS, and JavaScript in `apps/web`. FastAPI serves those files directly, so there is no frontend package install or build step.
 
 ### Docker Compose
 
