@@ -91,6 +91,11 @@ const state = {
   onboarding: { ...defaultOnboarding, email_templates: cloneEmailTemplates() },
   resetEmail: "",
   devOtp: "",
+  hostedOtpEmail: "",
+  hostedOtpDevCode: "",
+  hostedResetEmail: "",
+  hostedResetDevCode: "",
+  hostedMagicDevLink: "",
   message: "",
   error: "",
   busy: false,
@@ -111,6 +116,8 @@ const routes = [
   { href: "/templates", label: "Templates" },
   { href: "/analytics", label: "Analytics" },
 ];
+
+const hostedAuthPaths = ["/login", "/register", "/verify", "/reset-password"];
 
 const metrics = [
   { label: "Domains", value: "0", detail: "Allowed origins" },
@@ -494,6 +501,23 @@ async function api(path, options = {}) {
   return body;
 }
 
+async function publicApi(path, options = {}) {
+  const response = await fetch(path, {
+    ...options,
+    headers: {
+      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.headers || {}),
+    },
+  });
+  const body = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(body?.detail || "Request failed.");
+  }
+
+  return body;
+}
+
 async function loadSetupStatus() {
   state.setup = await api("/api/v1/setup/status");
 }
@@ -553,6 +577,35 @@ function currentPath() {
   return window.location.pathname || "/";
 }
 
+function isHostedAuthPath(path = currentPath()) {
+  return hostedAuthPaths.includes(path);
+}
+
+function hostedAuthContext() {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    redirectUrl: params.get("redirect_url") || "",
+    codeChallenge: params.get("code_challenge") || "",
+    token: params.get("token") || "",
+  };
+}
+
+function hostedAuthQuery() {
+  const params = new URLSearchParams(window.location.search);
+  params.delete("token");
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
+function hostedLink(path) {
+  return `${path}${hostedAuthQuery()}`;
+}
+
+function hasHostedAuthRequest() {
+  const context = hostedAuthContext();
+  return Boolean(context.redirectUrl && context.codeChallenge);
+}
+
 function navigate(path) {
   if (currentPath() !== path) {
     window.history.pushState({}, "", path);
@@ -560,6 +613,12 @@ function navigate(path) {
   state.error = "";
   state.message = "";
   render();
+}
+
+function completeHostedAuth(authCodeResponse) {
+  const redirectUrl = new URL(authCodeResponse.redirect_url);
+  redirectUrl.searchParams.set("code", authCodeResponse.authorization_code);
+  window.location.href = redirectUrl.toString();
 }
 
 function currentBrandName() {
@@ -1201,6 +1260,197 @@ function renderAuth() {
   `;
 }
 
+function renderHostedAuthPage(path = currentPath()) {
+  const context = hostedAuthContext();
+  const needsAuthRequest = path !== "/reset-password" && !(path === "/verify" && context.token);
+  const missingContext = needsAuthRequest && !hasHostedAuthRequest();
+  const title = {
+    "/login": "Sign in",
+    "/register": "Create account",
+    "/verify": context.token ? "Complete sign in" : "Verify code",
+    "/reset-password": "Reset password",
+  }[path] || "Sign in";
+  const eyebrow = path === "/reset-password" ? "Account recovery" : "Hosted auth";
+
+  app.className = "hosted-auth-shell obsidian-grid";
+  app.innerHTML = `
+    <main class="hosted-auth-main">
+      <div class="hosted-auth-brand">
+        ${brandVisualMarkup(currentBrandName(), { compact: false })}
+        <strong>${escapeHtml(currentBrandName())}</strong>
+      </div>
+      <section class="hosted-auth-card" aria-label="${escapeHtml(title)}">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">${escapeHtml(eyebrow)}</span>
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(hostedAuthSubtitle(path, Boolean(context.token)))}</p>
+        </div>
+        ${
+          missingContext
+            ? renderHostedMissingContext()
+            : renderHostedAuthContent(path, context)
+        }
+        ${renderError()}
+        ${renderMessage()}
+      </section>
+    </main>
+  `;
+}
+
+function hostedAuthSubtitle(path, hasToken) {
+  if (path === "/register") {
+    return "Create a password account and return to the app with an authorization code.";
+  }
+  if (path === "/verify" && hasToken) {
+    return "Use the secure link from your email to finish signing in.";
+  }
+  if (path === "/verify") {
+    return "Enter the one-time passcode sent to your email.";
+  }
+  if (path === "/reset-password") {
+    return "Use an email OTP to update your password.";
+  }
+  return "Choose a sign-in method and return to the app with an authorization code.";
+}
+
+function renderHostedMissingContext() {
+  return `
+    <div class="hosted-auth-note">
+      <strong>Missing auth request</strong>
+      <p>This page needs a redirect URL and PKCE challenge from the application.</p>
+    </div>
+  `;
+}
+
+function renderHostedAuthContent(path, context) {
+  if (path === "/register") {
+    return `
+      <form class="form-grid" data-form="hosted-register">
+        <label class="field">
+          <span>Email</span>
+          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
+        </label>
+        <div class="form-actions">
+          <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+            ${state.busy ? "Creating..." : "Create account"}
+          </button>
+          <a class="text-action" href="${hostedLink("/login")}" data-link>Sign in</a>
+        </div>
+      </form>
+    `;
+  }
+
+  if (path === "/verify" && context.token) {
+    return `
+      <div class="hosted-auth-note">
+        <strong>Magic link ready</strong>
+        <p>Continue to verify the link and return to your application.</p>
+      </div>
+      <div class="form-actions">
+        <button class="primary-action" type="button" data-action="hosted-magic-consume" ${state.busy ? "disabled" : ""}>
+          ${state.busy ? "Verifying..." : "Continue"}
+        </button>
+      </div>
+    `;
+  }
+
+  if (path === "/verify") {
+    return `
+      <form class="form-grid" data-form="${state.hostedOtpEmail ? "hosted-otp-verify" : "hosted-otp-start"}">
+        ${state.hostedOtpDevCode ? `<p class="dev-otp">Development OTP: ${escapeHtml(state.hostedOtpDevCode)}</p>` : ""}
+        <label class="field">
+          <span>Email</span>
+          <input name="email" type="email" autocomplete="email" value="${escapeHtml(
+            state.hostedOtpEmail,
+          )}" placeholder="you@example.com" required ${state.hostedOtpEmail ? "readonly" : ""} />
+        </label>
+        ${
+          state.hostedOtpEmail
+            ? `
+              <label class="field">
+                <span>OTP</span>
+                <input name="otp" type="text" inputmode="numeric" placeholder="123456" required />
+              </label>
+            `
+            : ""
+        }
+        <div class="form-actions">
+          <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+            ${state.busy ? "Working..." : state.hostedOtpEmail ? "Verify code" : "Send code"}
+          </button>
+          <a class="text-action" href="${hostedLink("/login")}" data-link>Back to sign in</a>
+        </div>
+      </form>
+    `;
+  }
+
+  if (path === "/reset-password") {
+    return `
+      <form class="form-grid" data-form="${state.hostedResetEmail ? "hosted-reset-confirm" : "hosted-reset-start"}">
+        ${state.hostedResetDevCode ? `<p class="dev-otp">Development OTP: ${escapeHtml(state.hostedResetDevCode)}</p>` : ""}
+        <label class="field">
+          <span>Email</span>
+          <input name="email" type="email" autocomplete="email" value="${escapeHtml(
+            state.hostedResetEmail,
+          )}" placeholder="you@example.com" required ${state.hostedResetEmail ? "readonly" : ""} />
+        </label>
+        ${
+          state.hostedResetEmail
+            ? `
+              <label class="field">
+                <span>OTP</span>
+                <input name="otp" type="text" inputmode="numeric" placeholder="123456" required />
+              </label>
+              <label class="field">
+                <span>New password</span>
+                <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
+              </label>
+            `
+            : ""
+        }
+        <div class="form-actions">
+          <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+            ${state.busy ? "Working..." : state.hostedResetEmail ? "Update password" : "Send reset code"}
+          </button>
+          <a class="text-action" href="${hostedLink("/login")}" data-link>Back to sign in</a>
+        </div>
+      </form>
+    `;
+  }
+
+  return `
+    <form class="form-grid" data-form="hosted-login">
+      <label class="field">
+        <span>Email</span>
+        <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+      </label>
+      <label class="field">
+        <span>Password</span>
+        <input name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <div class="form-actions">
+        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+          ${state.busy ? "Signing in..." : "Sign in"}
+        </button>
+        <button class="secondary-action" type="button" data-action="hosted-google-start" ${state.busy ? "disabled" : ""}>
+          Google
+        </button>
+      </div>
+      <div class="hosted-auth-links">
+        <a href="${hostedLink("/register")}" data-link>Create account</a>
+        <a href="${hostedLink("/verify")}" data-link>Use OTP</a>
+        <button type="button" data-action="hosted-magic-start">Email magic link</button>
+        <a href="${hostedLink("/reset-password")}" data-link>Reset password</a>
+      </div>
+      ${state.hostedMagicDevLink ? `<p class="dev-otp">Development magic link: ${escapeHtml(state.hostedMagicDevLink)}</p>` : ""}
+    </form>
+  `;
+}
+
 function dashboardMetrics() {
   if (!state.settings) {
     return metrics;
@@ -1573,6 +1823,11 @@ function render() {
     return;
   }
 
+  if (isHostedAuthPath(path)) {
+    renderHostedAuthPage(path);
+    return;
+  }
+
   if (!state.user) {
     renderAuth();
     return;
@@ -1858,6 +2113,242 @@ async function handleResetConfirm(form) {
   }
 }
 
+function hostedPayloadFromForm(form) {
+  const formData = new FormData(form);
+  const context = hostedAuthContext();
+  return {
+    email: String(formData.get("email") || "").trim(),
+    password: String(formData.get("password") || ""),
+    otp: String(formData.get("otp") || "").trim(),
+    redirect_url: context.redirectUrl,
+    code_challenge: context.codeChallenge,
+  };
+}
+
+async function handleHostedPasswordLogin(form) {
+  const payload = hostedPayloadFromForm(form);
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const authCode = await publicApi("/api/v1/auth/password/login", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    completeHostedAuth(authCode);
+  } catch (error) {
+    state.error = error.message;
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedRegister(form) {
+  const payload = hostedPayloadFromForm(form);
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const authCode = await publicApi("/api/v1/auth/register", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    completeHostedAuth(authCode);
+  } catch (error) {
+    state.error = error.message;
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedOtpStart(form) {
+  const payload = hostedPayloadFromForm(form);
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const start = await publicApi("/api/v1/auth/otp/start", {
+      method: "POST",
+      body: JSON.stringify({
+        email: payload.email,
+        redirect_url: payload.redirect_url,
+        code_challenge: payload.code_challenge,
+      }),
+    });
+    state.hostedOtpEmail = payload.email;
+    state.hostedOtpDevCode = start.dev_otp || "";
+    state.message = "Enter the code sent to your email.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedOtpVerify(form) {
+  const payload = hostedPayloadFromForm(form);
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const authCode = await publicApi("/api/v1/auth/otp/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        email: state.hostedOtpEmail || payload.email,
+        otp: payload.otp,
+        redirect_url: payload.redirect_url,
+        code_challenge: payload.code_challenge,
+      }),
+    });
+    completeHostedAuth(authCode);
+  } catch (error) {
+    state.error = error.message;
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedMagicStart(form) {
+  const formData = new FormData(form);
+  const email = String(formData.get("email") || "").trim();
+  const context = hostedAuthContext();
+  if (!email) {
+    state.error = "Enter an email address first.";
+    render();
+    return;
+  }
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const start = await publicApi("/api/v1/auth/magic-link/start", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        redirect_url: context.redirectUrl,
+        code_challenge: context.codeChallenge,
+      }),
+    });
+    state.hostedMagicDevLink = start.dev_magic_link || "";
+    state.message = "Check your email for the magic link.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedMagicConsume() {
+  const context = hostedAuthContext();
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const authCode = await publicApi("/api/v1/auth/magic-link/consume", {
+      method: "POST",
+      body: JSON.stringify({ token: context.token }),
+    });
+    completeHostedAuth(authCode);
+  } catch (error) {
+    state.error = error.message;
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedGoogleStart() {
+  const context = hostedAuthContext();
+  const query = new URLSearchParams({
+    redirect_url: context.redirectUrl,
+    code_challenge: context.codeChallenge,
+  });
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const start = await publicApi(`/api/v1/auth/google/start?${query.toString()}`);
+    window.location.href = start.authorization_url;
+  } catch (error) {
+    state.error = error.message;
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedPasswordResetStart(form) {
+  const formData = new FormData(form);
+  const email = String(formData.get("email") || "").trim();
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const start = await publicApi("/api/v1/auth/password-reset/start", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    state.hostedResetEmail = email;
+    state.hostedResetDevCode = start.dev_otp || "";
+    state.message = "Enter the reset code sent to your email.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedPasswordResetConfirm(form) {
+  const formData = new FormData(form);
+  const otp = String(formData.get("otp") || "").trim();
+  const password = String(formData.get("password") || "");
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    await publicApi("/api/v1/auth/password-reset/confirm", {
+      method: "POST",
+      body: JSON.stringify({ email: state.hostedResetEmail, otp, password }),
+    });
+    state.hostedResetEmail = "";
+    state.hostedResetDevCode = "";
+    state.message = "Password updated. You can sign in now.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
 async function handleSettingsSubmit(form) {
   const formData = new FormData(form);
   const payload = {
@@ -1985,6 +2476,24 @@ app.addEventListener("submit", (event) => {
   if (formName === "reset-confirm") {
     void handleResetConfirm(form);
   }
+  if (formName === "hosted-login") {
+    void handleHostedPasswordLogin(form);
+  }
+  if (formName === "hosted-register") {
+    void handleHostedRegister(form);
+  }
+  if (formName === "hosted-otp-start") {
+    void handleHostedOtpStart(form);
+  }
+  if (formName === "hosted-otp-verify") {
+    void handleHostedOtpVerify(form);
+  }
+  if (formName === "hosted-reset-start") {
+    void handleHostedPasswordResetStart(form);
+  }
+  if (formName === "hosted-reset-confirm") {
+    void handleHostedPasswordResetConfirm(form);
+  }
   if (formName === "settings") {
     void handleSettingsSubmit(form);
   }
@@ -2053,6 +2562,18 @@ app.addEventListener("click", (event) => {
     if (form && Number.isInteger(index)) {
       void handleTemplateSave(form, index);
     }
+  }
+  if (action === "hosted-google-start") {
+    void handleHostedGoogleStart();
+  }
+  if (action === "hosted-magic-start") {
+    const form = event.target.closest("form");
+    if (form) {
+      void handleHostedMagicStart(form);
+    }
+  }
+  if (action === "hosted-magic-consume") {
+    void handleHostedMagicConsume();
   }
 });
 

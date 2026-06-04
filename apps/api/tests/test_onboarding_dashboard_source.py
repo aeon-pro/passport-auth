@@ -198,6 +198,26 @@ def test_dashboard_contains_email_templates_page() -> None:
     assert "template-tabs" in styles_css
 
 
+def test_static_app_contains_public_hosted_auth_pages() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert '"/login"' in app_js
+    assert '"/register"' in app_js
+    assert '"/verify"' in app_js
+    assert '"/reset-password"' in app_js
+    assert "renderHostedAuthPage" in app_js
+    assert "handleHostedPasswordLogin" in app_js
+    assert "handleHostedRegister" in app_js
+    assert "handleHostedOtpStart" in app_js
+    assert "handleHostedMagicConsume" in app_js
+    assert "handleHostedGoogleStart" in app_js
+    assert "handleHostedPasswordResetConfirm" in app_js
+    assert "completeHostedAuth" in app_js
+    assert "hosted-auth-shell" in styles_css
+    assert "hosted-auth-card" in styles_css
+
+
 def test_email_template_cards_have_individual_save_actions() -> None:
     app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")

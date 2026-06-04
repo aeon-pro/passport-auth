@@ -41,6 +41,23 @@ python3 -m venv .venv
 
 The dashboard is plain static HTML, CSS, and JavaScript in `apps/web`. FastAPI serves those files directly, so there is no frontend package install or build step.
 
+## Public Auth Surface
+
+Hosted pages are available at `/login`, `/register`, `/verify`, and `/reset-password`.
+Application frontends should pass `redirect_url` and `code_challenge` query parameters when
+starting hosted sign-in flows. Successful hosted flows return an authorization code to the
+configured redirect URL; access and refresh tokens are only returned by `/api/v1/auth/token`.
+
+Public API routes live under `/api/v1/auth/*`:
+
+- `POST /register`
+- `POST /password/login`
+- `POST /otp/start` and `POST /otp/verify`
+- `POST /magic-link/start` and `POST /magic-link/consume`
+- `GET /google/start` and `GET /google/callback`
+- `POST /token`, `POST /refresh`, `POST /logout`, and `GET /me`
+- `POST /password-reset/start` and `POST /password-reset/confirm`
+
 ### Docker Compose
 
 ```bash
