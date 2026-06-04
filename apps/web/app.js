@@ -94,6 +94,7 @@ const state = {
 };
 
 const routes = [
+  { href: "/", label: "Dashboard" },
   { href: "/users", label: "Users" },
   { href: "/settings", label: "Settings" },
   { href: "/templates", label: "Templates" },

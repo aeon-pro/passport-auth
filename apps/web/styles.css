@@ -225,24 +225,26 @@ small {
 
 .nav {
   display: grid;
-  gap: 2px;
+  gap: 8px;
 }
 
 .nav a {
   position: relative;
-  border: 1px solid transparent;
+  border: 0;
   border-radius: 7px;
   color: var(--ink-dim);
-  padding: 10px 11px;
+  padding: 8px 10px;
   font-size: 13px;
   font-weight: 390;
+  transition:
+    background 160ms ease,
+    color 160ms ease;
 }
 
 .nav a.active,
 .nav a:hover,
 .nav a:focus-visible {
-  border-color: var(--line);
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(255, 255, 255, 0.026);
   color: var(--ink);
   outline: none;
 }

@@ -27,7 +27,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-profile-dropdown" in index_html
+    assert "2026-06-04-sidebar-nav" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -74,6 +74,24 @@ def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
     assert "currentBrandName" in app_js
     assert "profile-menu" in app_js
     assert "profile-dropdown" in styles_css
+
+
+def test_dashboard_sidebar_has_dashboard_route_and_simple_nav_states() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    nav_body = css_rule_body(styles_css, ".nav")
+    nav_link_body = css_rule_body(styles_css, ".nav a")
+    nav_state_body = css_rule_body(
+        styles_css,
+        ".nav a.active,\n.nav a:hover,\n.nav a:focus-visible",
+    )
+
+    assert '{ href: "/", label: "Dashboard" }' in app_js
+    assert nav_body.index("gap: 8px;") >= 0
+    assert "border: 0;" in nav_link_body
+    assert "border-color" not in nav_state_body
+    assert "rgba(255, 255, 255, 0.026)" in nav_state_body
 
 
 def test_sidebar_profile_dropdown_stays_inside_sidebar() -> None:
