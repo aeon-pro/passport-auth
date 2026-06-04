@@ -1364,10 +1364,28 @@ function renderMessage() {
   return state.message ? `<p class="form-message">${escapeHtml(state.message)}</p>` : "";
 }
 
+function renderBootScreen() {
+  app.className = "boot-screen";
+  app.innerHTML = `
+    <section class="loading-panel" aria-label="Loading dashboard">
+      <div class="loading-wordmark">
+        <span class="brand-mark" aria-hidden="true">PA</span>
+        <strong>Passport Auth</strong>
+      </div>
+      <div class="loading-copy">
+        <span class="eyebrow">Dashboard</span>
+        <p>Preparing control plane</p>
+      </div>
+      <div class="loading-track" aria-hidden="true">
+        <span></span>
+      </div>
+    </section>
+  `;
+}
+
 function render() {
   if (!state.setup) {
-    app.className = "boot-screen";
-    app.innerHTML = `${brandMarkup(true)}<p>Loading Passport Auth</p>`;
+    renderBootScreen();
     return;
   }
 

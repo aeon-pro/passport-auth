@@ -20,12 +20,27 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-sidebar-profile" in index_html
+    assert "2026-06-04-loading-screen" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
     assert "obsidian-grid" in styles_css
     assert "kinetic-line" in styles_css
+
+
+def test_static_dashboard_has_polished_loading_screen() -> None:
+    index_html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "renderBootScreen" in app_js
+    assert "loading-panel" in index_html
+    assert "loading-panel" in app_js
+    assert "loading-track" in index_html
+    assert "loading-track" in styles_css
+    assert "loading-wordmark" in styles_css
+    assert "Loading Passport Auth" not in index_html
+    assert "Loading Passport Auth" not in app_js
 
 
 def test_dashboard_shell_does_not_show_environment_badge() -> None:

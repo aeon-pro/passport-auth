@@ -4,19 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Passport Auth</title>
-    <meta name="passport-auth-ui-version" content="2026-06-04-sidebar-profile" />
-    <link rel="stylesheet" href="/styles.css?v=2026-06-04-sidebar-profile" />
-    <script defer src="/app.js?v=2026-06-04-sidebar-profile"></script>
+    <meta name="passport-auth-ui-version" content="2026-06-04-loading-screen" />
+    <link rel="stylesheet" href="/styles.css?v=2026-06-04-loading-screen" />
+    <script defer src="/app.js?v=2026-06-04-loading-screen"></script>
   </head>
   <body>
     <div id="app" class="boot-screen">
-      <div class="brand compact">
+      <section class="loading-panel" aria-label="Loading dashboard">
+        <div class="loading-wordmark">
         <span class="brand-mark" aria-hidden="true">PA</span>
-        <span>
           <strong>Passport Auth</strong>
-        </span>
-      </div>
-      <p>Loading Passport Auth</p>
+        </div>
+        <div class="loading-copy">
+          <span class="eyebrow">Dashboard</span>
+          <p>Preparing control plane</p>
+        </div>
+        <div class="loading-track" aria-hidden="true">
+          <span></span>
+        </div>
+      </section>
     </div>
   </body>
 </html>
