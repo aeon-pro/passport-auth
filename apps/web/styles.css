@@ -540,41 +540,21 @@ p {
 
 .color-field {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 52px;
   gap: 10px;
-  align-items: center;
 }
 
-.template-color-field {
-  align-items: start;
-}
-
-.field .color-picker {
-  min-height: 45px;
-  padding: 4px;
-  cursor: pointer;
-}
-
-.field .color-picker::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.field .color-picker::-webkit-color-swatch {
-  border: 0;
-  border-radius: 5px;
-}
-
-.field .color-picker::-moz-color-swatch {
-  border: 0;
-  border-radius: 5px;
+.color-preset-box {
+  width: fit-content;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--field);
+  padding: 10px;
 }
 
 .color-preset-grid {
   display: flex;
-  grid-column: 1 / -1;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 2px;
 }
 
 .color-preset-swatch {
