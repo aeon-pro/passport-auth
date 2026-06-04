@@ -20,12 +20,20 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-template-section-saves" in index_html
+    assert "2026-06-04-no-env-badge" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
     assert "obsidian-grid" in styles_css
     assert "kinetic-line" in styles_css
+
+
+def test_dashboard_shell_does_not_show_environment_badge() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert "topbar-meta" not in app_js
+    assert "Environment" not in app_js
+    assert "<strong>Local</strong>" not in app_js
 
 
 def test_settings_sections_have_local_save_actions_and_centered_toggles() -> None:

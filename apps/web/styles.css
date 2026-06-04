@@ -200,7 +200,7 @@ small {
   display: flex;
   min-height: 66px;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 18px;
   border-bottom: 1px solid var(--line-soft);
   background: rgba(3, 3, 4, 0.72);
@@ -208,7 +208,6 @@ small {
   backdrop-filter: blur(18px);
 }
 
-.topbar-meta,
 .panel-heading,
 .section-heading,
 .page-heading {

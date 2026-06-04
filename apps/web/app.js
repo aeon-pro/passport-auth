@@ -464,10 +464,6 @@ function renderAppShell(content) {
 
     <main class="content">
       <header class="command-bar topbar">
-        <div class="topbar-meta">
-          <span class="eyebrow">Environment</span>
-          <strong>Local</strong>
-        </div>
         <div class="topbar-actions">
           <span class="status-pill">${status}</span>
           ${userLabel}
