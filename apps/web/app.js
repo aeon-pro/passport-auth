@@ -9,6 +9,11 @@ const templateColorPresets = [
   "#ff9fb2",
   "#c7b7ff",
 ];
+const templateSaveLabels = {
+  magic_link: "Save Magic link",
+  otp: "Save One-time passcode",
+  password_reset: "Save Password reset OTP",
+};
 
 const defaultEmailTemplates = [
   {
@@ -331,6 +336,10 @@ function readEmailTemplatesFromForm(form) {
       String(formData.get(`email_templates.${index}.support_url`) || "").trim() ||
       defaultTemplate.support_url,
   }));
+}
+
+function readEmailTemplateFromForm(form, index) {
+  return readEmailTemplatesFromForm(form)[index] || null;
 }
 
 function ownerInitials() {
@@ -817,6 +826,7 @@ function renderTemplateColorPresets(selectedColor) {
 
 function renderTemplateCard(template, index, brandName) {
   const accentColor = normalizePresetColor(template.accent_color);
+  const saveLabel = templateSaveLabels[template.key] || `Save ${template.name}`;
   const sampleSubject = sampleTemplateText(template.subject, brandName);
   const sampleHeadline = sampleTemplateText(template.headline, brandName);
   const sampleBody = sampleTemplateText(template.body, brandName);
@@ -906,6 +916,17 @@ function renderTemplateCard(template, index, brandName) {
                 ${renderTemplateColorPresets(accentColor)}
               </div>
             </label>
+          </div>
+          <div class="template-card-actions">
+            <button
+              class="secondary-action section-save"
+              type="button"
+              data-action="save-template"
+              data-template-index="${index}"
+              ${state.busy ? "disabled" : ""}
+            >
+              ${state.busy ? "Saving..." : escapeHtml(saveLabel)}
+            </button>
           </div>
         </div>
       </div>
@@ -1310,7 +1331,7 @@ function renderTemplates() {
   const templates = normalizeEmailTemplates(settings.email_templates);
 
   renderAppShell(`
-    <form class="templates-route" data-form="templates">
+    <form class="templates-route">
       <header class="settings-intro">
         <div class="page-heading compact-heading">
           <span class="eyebrow">Dashboard</span>
@@ -1328,11 +1349,6 @@ function renderTemplates() {
 
       ${renderError()}
       ${renderMessage()}
-      <div class="sticky-actions">
-        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-          ${state.busy ? "Saving..." : "Save templates"}
-        </button>
-      </div>
     </form>
   `);
 }
@@ -1686,10 +1702,19 @@ async function handleSettingsSubmit(form) {
   }
 }
 
-async function handleTemplatesSubmit(form) {
-  const payload = {
-    email_templates: readEmailTemplatesFromForm(form),
-  };
+async function handleTemplateSave(form, index) {
+  const editedTemplate = readEmailTemplateFromForm(form, index);
+  if (!editedTemplate) {
+    state.error = "Select a template section to save.";
+    render();
+    return;
+  }
+
+  const currentTemplates = normalizeEmailTemplates(state.settings?.email_templates);
+  const emailTemplates = currentTemplates.map((template, templateIndex) =>
+    templateIndex === index ? editedTemplate : template,
+  );
+  const payload = { email_templates: emailTemplates };
 
   state.busy = true;
   state.error = "";
@@ -1701,7 +1726,7 @@ async function handleTemplatesSubmit(form) {
       method: "PUT",
       body: JSON.stringify(payload),
     });
-    state.message = "Templates saved.";
+    state.message = `${editedTemplate.name} saved.`;
   } catch (error) {
     state.error = error.message;
   } finally {
@@ -1758,9 +1783,6 @@ app.addEventListener("submit", (event) => {
   if (formName === "settings") {
     void handleSettingsSubmit(form);
   }
-  if (formName === "templates") {
-    void handleTemplatesSubmit(form);
-  }
 });
 
 app.addEventListener("input", (event) => {
@@ -1807,7 +1829,8 @@ app.addEventListener("click", (event) => {
     return;
   }
 
-  const action = event.target.closest("[data-action]")?.dataset.action;
+  const actionButton = event.target.closest("[data-action]");
+  const action = actionButton?.dataset.action;
   if (!action) {
     return;
   }
@@ -1846,6 +1869,13 @@ app.addEventListener("click", (event) => {
     const form = event.target.closest("form");
     if (form) {
       void handleSettingsSubmit(form);
+    }
+  }
+  if (action === "save-template") {
+    const form = event.target.closest("form");
+    const index = Number.parseInt(actionButton.dataset.templateIndex || "", 10);
+    if (form && Number.isInteger(index)) {
+      void handleTemplateSave(form, index);
     }
   }
 });

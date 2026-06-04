@@ -764,6 +764,12 @@ p {
   gap: 18px;
 }
 
+.template-card-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 2px;
+}
+
 .template-preview {
   --email-surface: #f3f3ef;
   --email-card: #ffffff;
