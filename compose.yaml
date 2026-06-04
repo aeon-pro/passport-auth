@@ -9,6 +9,7 @@ services:
       - APP_ENV=production
       - WEB_STATIC_DIR=/app/static
       - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:?}
+      - DASHBOARD_JWT_TTL_SECONDS=${DASHBOARD_JWT_TTL_SECONDS:-31536000}
       - DATABASE_URL=${DATABASE_URL:?}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - CLICKHOUSE_URL=${CLICKHOUSE_URL:?}

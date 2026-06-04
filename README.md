@@ -59,6 +59,7 @@ For production, set complete connection URLs instead of separate database userna
 - `DATABASE_URL`
 - `CLICKHOUSE_URL`
 - `REDIS_URL`, unless you use the included Redis service
-- `APP_ENCRYPTION_KEY`
+- `APP_ENCRYPTION_KEY`, kept stable across deploys because it signs dashboard sessions
+- `DASHBOARD_JWT_TTL_SECONDS`, defaults to `31536000` for one-year dashboard sessions
 
 The exposed web service still listens on container port `8000`.

@@ -1,7 +1,10 @@
+import time
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from passport_auth.core.config import Settings
+from passport_auth.dashboard.tokens import decode_dashboard_token
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
@@ -53,6 +56,31 @@ async def test_owner_can_login_and_read_dashboard_profile() -> None:
     assert login_response.json()["user"] == {"email": "owner@example.com", "role": "owner"}
     assert me_response.status_code == 200
     assert me_response.json() == {"email": "owner@example.com", "role": "owner"}
+
+
+@pytest.mark.asyncio
+async def test_dashboard_login_token_is_long_lived_by_default() -> None:
+    _, app = create_test_app()
+    transport = ASGITransport(app=app)
+    issued_at = int(time.time())
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        login_response = await client.post(
+            "/api/v1/dashboard/auth/login",
+            json={
+                "email": "owner@example.com",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+
+    payload = decode_dashboard_token(
+        login_response.json()["access_token"],
+        secret="test-jwt-secret",
+    )
+    ttl_seconds = int(payload["exp"]) - issued_at
+
+    assert login_response.status_code == 200
+    assert ttl_seconds >= 31_536_000 - 5
 
 
 @pytest.mark.asyncio
