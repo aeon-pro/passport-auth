@@ -303,6 +303,12 @@ small {
   outline: none;
 }
 
+.profile-summary > span:last-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
 .profile-avatar {
   display: grid;
   width: 34px;
