@@ -20,7 +20,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-preset-color-boxes" in index_html
+    assert "2026-06-04-sidebar-profile" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -34,6 +34,24 @@ def test_dashboard_shell_does_not_show_environment_badge() -> None:
     assert "topbar-meta" not in app_js
     assert "Environment" not in app_js
     assert "<strong>Local</strong>" not in app_js
+
+
+def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
+    index_html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "Single app auth" not in index_html
+    assert "Single app auth" not in app_js
+    assert "Setup complete" not in app_js
+    assert "Owner setup required" not in app_js
+    assert "status-pill" not in app_js
+    assert "user-label" not in app_js
+    assert "topbar-actions" not in app_js
+    assert "renderSidebarProfile" in app_js
+    assert "currentBrandName" in app_js
+    assert "profile-menu" in app_js
+    assert "profile-dropdown" in styles_css
 
 
 def test_settings_sections_have_local_save_actions_and_centered_toggles() -> None:

@@ -460,26 +460,58 @@ function navigate(path) {
   render();
 }
 
+function currentBrandName() {
+  return state.settings?.brand_name || state.onboarding?.brand_name || "Passport Auth";
+}
+
+function brandInitials(name = currentBrandName()) {
+  const words = String(name || "Passport Auth")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  const initials = words.length > 1 ? `${words[0][0]}${words[1][0]}` : words[0]?.slice(0, 2);
+  return (initials || "PA").toUpperCase();
+}
+
 function brandMarkup(compact = false) {
+  const name = currentBrandName();
   return `
     <a class="brand ${compact ? "compact" : ""}" href="/" data-link>
-      <span class="brand-mark" aria-hidden="true">PA</span>
+      <span class="brand-mark" aria-hidden="true">${escapeHtml(brandInitials(name))}</span>
       <span>
-        <h1>Passport Auth</h1>
-        <small>Single app auth</small>
+        <h1>${escapeHtml(name)}</h1>
       </span>
     </a>
   `;
 }
 
+function renderSidebarProfile() {
+  if (!state.user) {
+    return "";
+  }
+
+  return `
+    <details class="profile-menu">
+      <summary class="profile-summary">
+        <span class="profile-avatar" aria-hidden="true">${escapeHtml(ownerInitials())}</span>
+        <span>
+          <strong>Profile</strong>
+          <small>Owner account</small>
+        </span>
+      </summary>
+      <div class="profile-dropdown">
+        <div class="profile-detail">
+          <span>Signed in as</span>
+          <strong>${escapeHtml(state.user.email)}</strong>
+        </div>
+        <button class="profile-signout" type="button" data-action="sign-out">Sign out</button>
+      </div>
+    </details>
+  `;
+}
+
 function renderAppShell(content) {
   const path = currentPath();
-  const setupDone = setupComplete();
-  const status = setupDone ? "Setup complete" : "Owner setup required";
-  const userLabel = state.user ? `<span class="user-label">${escapeHtml(state.user.email)}</span>` : "";
-  const authAction = state.user
-    ? `<button class="text-action" type="button" data-action="sign-out">Sign out</button>`
-    : `<a class="text-action" href="/" data-link>Sign in</a>`;
 
   app.className = "app-shell obsidian-grid";
   app.innerHTML = `
@@ -496,16 +528,10 @@ function renderAppShell(content) {
           )
           .join("")}
       </nav>
+      ${renderSidebarProfile()}
     </aside>
 
     <main class="content">
-      <header class="command-bar topbar">
-        <div class="topbar-actions">
-          <span class="status-pill">${status}</span>
-          ${userLabel}
-          ${authAction}
-        </div>
-      </header>
       <section class="workspace command-surface">${content}</section>
     </main>
   `;
