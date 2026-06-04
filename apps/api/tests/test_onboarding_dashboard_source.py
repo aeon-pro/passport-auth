@@ -27,7 +27,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-logo-assets" in index_html
+    assert "2026-06-04-transparent-logo" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -93,6 +93,16 @@ def test_dashboard_uses_uploaded_logos_across_brand_surfaces() -> None:
     assert "logo-upload-card" in styles_css
     assert "brand-logo" in styles_css
     assert "template-logo-image" in styles_css
+
+
+def test_uploaded_brand_logo_keeps_transparency_in_sidebar() -> None:
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    brand_logo_body = css_rule_body(styles_css, ".brand-logo")
+    assert "background: transparent;" in brand_logo_body
+    assert "border: 0;" in brand_logo_body
+    assert "padding: 0;" in brand_logo_body
+    assert "#f4f4ee" not in brand_logo_body
 
 
 def test_dashboard_sidebar_has_dashboard_route_and_simple_nav_states() -> None:

@@ -175,11 +175,10 @@ ul {
 .brand-logo {
   width: 34px;
   height: 34px;
-  border: 1px solid #39393f;
-  border-radius: 7px;
-  background: #f4f4ee;
+  border: 0;
+  background: transparent;
   object-fit: contain;
-  padding: 4px;
+  padding: 0;
 }
 
 .brand strong,
