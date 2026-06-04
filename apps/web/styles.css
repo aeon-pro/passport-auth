@@ -103,6 +103,11 @@ ul {
   height: 42px;
 }
 
+.loading-wordmark .brand-logo {
+  width: 42px;
+  height: 42px;
+}
+
 .loading-wordmark strong {
   color: var(--ink);
   font-size: 18px;

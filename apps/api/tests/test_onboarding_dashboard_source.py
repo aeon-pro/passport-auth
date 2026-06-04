@@ -5,7 +5,11 @@ WEB_DIR = Path(__file__).parents[2] / "web"
 
 
 def css_rule_body(css: str, selector: str) -> str:
-    match = re.search(rf"{re.escape(selector)}\s*\{{(?P<body>.*?)\n\}}", css, re.DOTALL)
+    match = re.search(
+        rf"(?:^|\n){re.escape(selector)}\s*\{{(?P<body>.*?)\n\}}",
+        css,
+        re.DOTALL,
+    )
     assert match is not None, f"Missing CSS rule for {selector}"
     return match.group("body")
 
@@ -27,7 +31,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-transparent-logo" in index_html
+    assert "2026-06-05-loading-logo" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -46,6 +50,9 @@ def test_static_dashboard_has_polished_loading_screen() -> None:
     assert "loading-track" in index_html
     assert "loading-track" in styles_css
     assert "loading-wordmark" in styles_css
+    assert "brandVisualMarkup(currentBrandName(), { compact: false })" in app_js
+    assert "await loadBranding();\n      renderBootScreen();" in app_js
+    assert ".loading-wordmark .brand-logo" in styles_css
     assert "Loading Passport Auth" not in index_html
     assert "Loading Passport Auth" not in app_js
 

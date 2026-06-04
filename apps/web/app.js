@@ -1540,12 +1540,13 @@ function renderMessage() {
 }
 
 function renderBootScreen() {
+  const name = currentBrandName();
   app.className = "boot-screen";
   app.innerHTML = `
     <section class="loading-panel" aria-label="Loading dashboard">
       <div class="loading-wordmark">
-        <span class="brand-mark" aria-hidden="true">PA</span>
-        <strong>Passport Auth</strong>
+        ${brandVisualMarkup(currentBrandName(), { compact: false })}
+        <strong>${escapeHtml(name)}</strong>
       </div>
       <div class="loading-copy">
         <span class="eyebrow">Dashboard</span>
@@ -2064,6 +2065,7 @@ async function boot() {
     await loadSetupStatus();
     if (setupComplete()) {
       await loadBranding();
+      renderBootScreen();
       await loadProfile();
       if (state.user) {
         await loadSettings({ quiet: true });
