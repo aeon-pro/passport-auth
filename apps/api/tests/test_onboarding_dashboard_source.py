@@ -1,6 +1,13 @@
+import re
 from pathlib import Path
 
 WEB_DIR = Path(__file__).parents[2] / "web"
+
+
+def css_rule_body(css: str, selector: str) -> str:
+    match = re.search(rf"{re.escape(selector)}\s*\{{(?P<body>.*?)\n\}}", css, re.DOTALL)
+    assert match is not None, f"Missing CSS rule for {selector}"
+    return match.group("body")
 
 
 def test_static_dashboard_contains_multi_step_onboarding() -> None:
@@ -20,7 +27,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-loading-screen" in index_html
+    assert "2026-06-04-profile-dropdown" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -67,6 +74,15 @@ def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
     assert "currentBrandName" in app_js
     assert "profile-menu" in app_js
     assert "profile-dropdown" in styles_css
+
+
+def test_sidebar_profile_dropdown_stays_inside_sidebar() -> None:
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    dropdown_body = css_rule_body(styles_css, ".profile-dropdown")
+    assert "width: 100%;" in dropdown_body
+    assert "box-sizing: border-box;" in dropdown_body
+    assert "overflow: hidden;" in dropdown_body
 
 
 def test_settings_sections_have_local_save_actions_and_centered_toggles() -> None:

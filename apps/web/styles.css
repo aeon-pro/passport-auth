@@ -315,11 +315,13 @@ small {
 
 .profile-dropdown {
   position: absolute;
+  left: 0;
   right: 0;
   bottom: calc(100% + 10px);
   z-index: 5;
   display: grid;
-  width: min(260px, calc(100vw - 44px));
+  box-sizing: border-box;
+  width: 100%;
   gap: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -327,6 +329,7 @@ small {
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 110px),
     var(--plane);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+  overflow: hidden;
   padding: 14px;
 }
 
