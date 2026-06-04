@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from passport_auth.api.v1 import router as api_v1_router
 from passport_auth.core.config import Settings, get_settings
 from passport_auth.setup.store import SetupStore, create_setup_store
-from passport_auth.web.static import mount_dashboard
+from passport_auth.web.static import mount_dashboard, mount_dashboard_assets
 
 
 def create_app(
@@ -23,6 +23,7 @@ def create_app(
         encryption_key=resolved_settings.app_encryption_key,
     )
     app.include_router(api_v1_router)
+    mount_dashboard_assets(app, resolved_settings.dashboard_asset_dir)
 
     dashboard_static_dir = static_dir or resolved_settings.web_static_dir
     if dashboard_static_dir:

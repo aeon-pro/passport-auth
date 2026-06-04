@@ -10,6 +10,16 @@ STATIC_HEADERS = {
 }
 
 
+def mount_dashboard_assets(app: FastAPI, asset_dir: str | Path) -> None:
+    asset_path = Path(asset_dir)
+    asset_path.mkdir(parents=True, exist_ok=True)
+    app.mount(
+        "/dashboard-assets",
+        StaticFiles(directory=asset_path, check_dir=False),
+        name="dashboard-uploaded-assets",
+    )
+
+
 def mount_dashboard(app: FastAPI, static_dir: str | Path) -> None:
     static_path = Path(static_dir)
     index_path = static_path / "index.html"

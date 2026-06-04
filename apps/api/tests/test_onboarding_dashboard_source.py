@@ -27,7 +27,7 @@ def test_static_dashboard_uses_obsidian_control_room_design() -> None:
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-04-sidebar-nav" in index_html
+    assert "2026-06-04-logo-assets" in index_html
     assert "shell-rail" in app_js
     assert "command-surface" in app_js
     assert "settings-matrix" in app_js
@@ -74,6 +74,25 @@ def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
     assert "currentBrandName" in app_js
     assert "profile-menu" in app_js
     assert "profile-dropdown" in styles_css
+
+
+def test_dashboard_uses_uploaded_logos_across_brand_surfaces() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "logo_url" in app_js
+    assert "mark_url" in app_js
+    assert "uploadLogoAsset" in app_js
+    assert "renderLogoUploadField" in app_js
+    assert "brandVisualMarkup" in app_js
+    assert "renderTemplateLogo" in app_js
+    assert "logo_file" in app_js
+    assert "mark_file" in app_js
+    assert 'class="brand-logo"' in app_js
+    assert 'class="template-logo-image"' in app_js
+    assert "logo-upload-card" in styles_css
+    assert "brand-logo" in styles_css
+    assert "template-logo-image" in styles_css
 
 
 def test_dashboard_sidebar_has_dashboard_route_and_simple_nav_states() -> None:

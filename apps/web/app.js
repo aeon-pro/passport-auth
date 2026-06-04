@@ -74,6 +74,8 @@ const defaultOnboarding = {
   google_client_secret: "",
   brand_name: "Passport Auth",
   primary_color: defaultTemplateColor,
+  logo_url: "",
+  mark_url: "",
   email_templates: cloneEmailTemplates(),
 };
 
@@ -81,6 +83,7 @@ const state = {
   setup: null,
   user: null,
   settings: null,
+  branding: null,
   settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
@@ -91,6 +94,14 @@ const state = {
   message: "",
   error: "",
   busy: false,
+  onboardingLogoFiles: {
+    primary: null,
+    mark: null,
+  },
+  onboardingLogoPreviews: {
+    primary: "",
+    mark: "",
+  },
 };
 
 const routes = [
@@ -313,6 +324,29 @@ function renderColorPresetField({ name, value, label }) {
   `;
 }
 
+function renderLogoPreview(url, fallbackText) {
+  if (url) {
+    return `<img src="${escapeHtml(url)}" alt="" />`;
+  }
+  return `<span>${escapeHtml(brandInitials(fallbackText))}</span>`;
+}
+
+function renderLogoUploadField({ label, name, hiddenName, currentUrl, fallbackText, note }) {
+  return `
+    <label class="logo-upload-card">
+      <input name="${escapeHtml(hiddenName)}" type="hidden" value="${escapeHtml(currentUrl || "")}" />
+      <input name="${escapeHtml(name)}" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
+      <span class="logo-upload-preview" aria-hidden="true">
+        ${renderLogoPreview(currentUrl, fallbackText)}
+      </span>
+      <span class="logo-upload-copy">
+        <strong>${escapeHtml(label)}</strong>
+        <small>${escapeHtml(note)}</small>
+      </span>
+    </label>
+  `;
+}
+
 function cloneEmailTemplates(templates = defaultEmailTemplates) {
   return templates.map((template) => ({ ...template }));
 }
@@ -379,15 +413,74 @@ function readEmailTemplateFromForm(form, index) {
   return readEmailTemplatesFromForm(form)[index] || null;
 }
 
+function rememberOnboardingLogo(formData, fieldName, slot) {
+  const file = selectedFormFile(formData, fieldName);
+  if (!file) {
+    return;
+  }
+
+  state.onboardingLogoFiles[slot] = file;
+  if (state.onboardingLogoPreviews[slot]) {
+    URL.revokeObjectURL(state.onboardingLogoPreviews[slot]);
+  }
+  state.onboardingLogoPreviews[slot] = URL.createObjectURL(file);
+}
+
+function selectedFormFile(formData, name) {
+  const file = formData.get(name);
+  if (typeof File === "undefined" || !(file instanceof File) || file.size === 0) {
+    return null;
+  }
+  return file;
+}
+
+async function uploadLogoAsset(slot, file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return api(`/api/v1/dashboard/assets/logos/${slot}`, {
+    method: "POST",
+    body: formData,
+  });
+}
+
+async function applySettingsLogoUploads(formData, payload) {
+  payload.logo_url = String(formData.get("logo_url") || "").trim();
+  payload.mark_url = String(formData.get("mark_url") || "").trim();
+
+  const logoFile = selectedFormFile(formData, "logo_file");
+  if (logoFile) {
+    const uploaded = await uploadLogoAsset("primary", logoFile);
+    payload.logo_url = uploaded.url;
+  }
+
+  const markFile = selectedFormFile(formData, "mark_file");
+  if (markFile) {
+    const uploaded = await uploadLogoAsset("mark", markFile);
+    payload.mark_url = uploaded.url;
+  }
+}
+
+async function applyOnboardingLogoUploads(payload) {
+  if (state.onboardingLogoFiles.primary) {
+    const uploaded = await uploadLogoAsset("primary", state.onboardingLogoFiles.primary);
+    payload.logo_url = uploaded.url;
+  }
+  if (state.onboardingLogoFiles.mark) {
+    const uploaded = await uploadLogoAsset("mark", state.onboardingLogoFiles.mark);
+    payload.mark_url = uploaded.url;
+  }
+}
+
 function ownerInitials() {
   return state.user?.email?.slice(0, 2).toUpperCase() || "PA";
 }
 
 async function api(path, options = {}) {
+  const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(path, {
     ...options,
     headers: {
-      ...(options.body ? { "Content-Type": "application/json" } : {}),
+      ...(options.body && !isFormData ? { "Content-Type": "application/json" } : {}),
       ...(state.token ? { Authorization: `Bearer ${state.token}` } : {}),
       ...(options.headers || {}),
     },
@@ -417,6 +510,14 @@ async function loadProfile() {
     localStorage.removeItem(TOKEN_KEY);
     state.token = null;
     state.user = null;
+  }
+}
+
+async function loadBranding() {
+  try {
+    state.branding = await api("/api/v1/dashboard/settings/branding");
+  } catch {
+    state.branding = null;
   }
 }
 
@@ -462,7 +563,23 @@ function navigate(path) {
 }
 
 function currentBrandName() {
-  return state.settings?.brand_name || state.onboarding?.brand_name || "Passport Auth";
+  return (
+    state.settings?.brand_name ||
+    state.branding?.brand_name ||
+    state.onboarding?.brand_name ||
+    "Passport Auth"
+  );
+}
+
+function currentBrandLogoUrl({ preferMark = true } = {}) {
+  const sources = [state.settings, state.branding, state.onboarding];
+  for (const source of sources) {
+    const preferred = preferMark ? source?.mark_url || source?.logo_url : source?.logo_url || source?.mark_url;
+    if (preferred) {
+      return preferred;
+    }
+  }
+  return "";
 }
 
 function brandInitials(name = currentBrandName()) {
@@ -478,12 +595,20 @@ function brandMarkup(compact = false) {
   const name = currentBrandName();
   return `
     <a class="brand ${compact ? "compact" : ""}" href="/" data-link>
-      <span class="brand-mark" aria-hidden="true">${escapeHtml(brandInitials(name))}</span>
+      ${brandVisualMarkup(name, { compact })}
       <span>
         <h1>${escapeHtml(name)}</h1>
       </span>
     </a>
   `;
+}
+
+function brandVisualMarkup(name = currentBrandName(), { compact = false } = {}) {
+  const logoUrl = currentBrandLogoUrl({ preferMark: compact });
+  if (logoUrl) {
+    return `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="" />`;
+  }
+  return `<span class="brand-mark" aria-hidden="true">${escapeHtml(brandInitials(name))}</span>`;
 }
 
 function renderSidebarProfile() {
@@ -517,7 +642,7 @@ function renderAppShell(content) {
   app.className = "app-shell obsidian-grid";
   app.innerHTML = `
     <aside class="shell-rail sidebar" aria-label="Workspace">
-      ${brandMarkup()}
+      ${brandMarkup(true)}
       <nav class="nav" aria-label="Primary">
         ${routes
           .map(
@@ -742,6 +867,8 @@ function renderOnboardingFields(stepIndex) {
   }
 
   if (stepIndex === 5) {
+    const logoPreview = state.onboardingLogoPreviews.primary || data.logo_url;
+    const markPreview = state.onboardingLogoPreviews.mark || data.mark_url || logoPreview;
     return `
       <div class="form-grid two-columns">
         <label class="field">
@@ -758,9 +885,25 @@ function renderOnboardingFields(stepIndex) {
             label: "Primary color presets",
           })}
         </label>
+        ${renderLogoUploadField({
+          label: "Primary logo",
+          name: "logo_file",
+          hiddenName: "logo_url",
+          currentUrl: logoPreview,
+          fallbackText: data.brand_name,
+          note: "Used in emails, hosted pages, and wide brand moments.",
+        })}
+        ${renderLogoUploadField({
+          label: "Compact mark",
+          name: "mark_file",
+          hiddenName: "mark_url",
+          currentUrl: markPreview,
+          fallbackText: data.brand_name,
+          note: "Used in the dashboard sidebar and compact auth chrome.",
+        })}
       </div>
       <div class="brand-preview" style="--preview-color: ${escapeHtml(normalizePresetColor(data.primary_color))}">
-        <span class="brand-preview-mark">PA</span>
+        <span class="brand-preview-mark">${renderLogoPreview(markPreview, data.brand_name)}</span>
         <div>
           <strong>${escapeHtml(data.brand_name || "Passport Auth")}</strong>
           <small>Hosted auth preview</small>
@@ -770,7 +913,11 @@ function renderOnboardingFields(stepIndex) {
   }
 
   if (stepIndex === 6) {
-    return renderTemplateCards(data.email_templates, data.brand_name || "Passport Auth");
+    return renderTemplateCards(
+      data.email_templates,
+      data.brand_name || "Passport Auth",
+      state.onboardingLogoPreviews.primary || data.logo_url || data.mark_url,
+    );
   }
 
   return renderOnboardingReview();
@@ -818,7 +965,7 @@ function renderOnboardingReview() {
   `;
 }
 
-function renderTemplateCards(templates, brandName) {
+function renderTemplateCards(templates, brandName, logoUrl = "") {
   const normalizedTemplates = normalizeEmailTemplates(templates);
 
   return `
@@ -836,13 +983,20 @@ function renderTemplateCards(templates, brandName) {
     </div>
     <div class="template-gallery">
       ${normalizedTemplates
-        .map((template, index) => renderTemplateCard(template, index, brandName))
+        .map((template, index) => renderTemplateCard(template, index, brandName, logoUrl))
         .join("")}
     </div>
   `;
 }
 
-function renderTemplateCard(template, index, brandName) {
+function renderTemplateLogo(brandName, logoUrl = "") {
+  if (logoUrl) {
+    return `<img class="template-logo-image" src="${escapeHtml(logoUrl)}" alt="" />`;
+  }
+  return `<span class="template-logo">${escapeHtml((brandName || "PA").slice(0, 2).toUpperCase())}</span>`;
+}
+
+function renderTemplateCard(template, index, brandName, logoUrl = "") {
   const accentColor = normalizePresetColor(template.accent_color);
   const saveLabel = templateSaveLabels[template.key] || `Save ${template.name}`;
   const sampleSubject = sampleTemplateText(template.subject, brandName);
@@ -937,7 +1091,7 @@ function renderTemplateCard(template, index, brandName) {
       <article class="template-preview" style="--template-color: ${escapeHtml(accentColor)}">
         <span class="template-subject">${escapeHtml(sampleSubject)}</span>
         <div class="template-mail">
-          <span class="template-logo">${escapeHtml((brandName || "PA").slice(0, 2).toUpperCase())}</span>
+          ${renderTemplateLogo(brandName, logoUrl)}
           <h4>${escapeHtml(sampleHeadline)}</h4>
           <p class="email-body-copy">${escapeHtml(sampleBody)}</p>
           <strong>${escapeHtml(sampleButton)}</strong>
@@ -1270,6 +1424,22 @@ function renderSettings() {
               label: "Primary color presets",
             })}
           </label>
+          ${renderLogoUploadField({
+            label: "Primary logo",
+            name: "logo_file",
+            hiddenName: "logo_url",
+            currentUrl: settings.logo_url,
+            fallbackText: settings.brand_name,
+            note: "Used in email templates, hosted pages, and larger brand surfaces.",
+          })}
+          ${renderLogoUploadField({
+            label: "Compact mark",
+            name: "mark_file",
+            hiddenName: "mark_url",
+            currentUrl: settings.mark_url || settings.logo_url,
+            fallbackText: settings.brand_name,
+            note: "Used in the sidebar, profile chrome, and tight layouts.",
+          })}
           ${renderSectionSave("branding")}
         </div>
       </section>
@@ -1337,7 +1507,11 @@ function renderTemplates() {
         </div>
       </header>
 
-      ${renderTemplateCards(templates, settings.brand_name || "Passport Auth")}
+      ${renderTemplateCards(
+        templates,
+        settings.brand_name || "Passport Auth",
+        settings.logo_url || settings.mark_url,
+      )}
 
       ${renderError()}
       ${renderMessage()}
@@ -1448,6 +1622,8 @@ function syncOnboardingFromForm(form) {
     "google_client_secret",
     "brand_name",
     "primary_color",
+    "logo_url",
+    "mark_url",
   ];
 
   for (const field of fields) {
@@ -1465,6 +1641,9 @@ function syncOnboardingFromForm(form) {
   if (formData.has("email_templates.0.key")) {
     state.onboarding.email_templates = readEmailTemplatesFromForm(form);
   }
+
+  rememberOnboardingLogo(formData, "logo_file", "primary");
+  rememberOnboardingLogo(formData, "mark_file", "mark");
 }
 
 function validateOnboardingStep(stepIndex) {
@@ -1507,6 +1686,8 @@ function buildSettingsPayload() {
     google_client_id: data.google_client_id,
     brand_name: data.brand_name || "Passport Auth",
     primary_color: normalizePresetColor(data.primary_color),
+    logo_url: data.logo_url || "",
+    mark_url: data.mark_url || "",
     password_login_enabled: data.password_login_enabled,
     otp_login_enabled: data.otp_login_enabled,
     magic_link_enabled: data.magic_link_enabled,
@@ -1550,11 +1731,21 @@ async function completeOnboarding() {
     state.token = login.access_token;
     state.user = login.user;
     localStorage.setItem(TOKEN_KEY, state.token);
+    const settingsPayload = buildSettingsPayload();
+    await applyOnboardingLogoUploads(settingsPayload);
     state.settings = await api("/api/v1/dashboard/settings", {
       method: "PUT",
-      body: JSON.stringify(buildSettingsPayload()),
+      body: JSON.stringify(settingsPayload),
     });
+    state.branding = {
+      brand_name: state.settings.brand_name,
+      primary_color: state.settings.primary_color,
+      logo_url: state.settings.logo_url,
+      mark_url: state.settings.mark_url,
+    };
     state.onboarding = { ...defaultOnboarding, email_templates: cloneEmailTemplates() };
+    state.onboardingLogoFiles = { primary: null, mark: null };
+    state.onboardingLogoPreviews = { primary: "", mark: "" };
     state.onboardingStep = 0;
     window.history.replaceState({}, "", "/");
   } catch (error) {
@@ -1699,10 +1890,17 @@ async function handleSettingsSubmit(form) {
   render();
 
   try {
+    await applySettingsLogoUploads(formData, payload);
     state.settings = await api("/api/v1/dashboard/settings", {
       method: "PUT",
       body: JSON.stringify(payload),
     });
+    state.branding = {
+      brand_name: state.settings.brand_name,
+      primary_color: state.settings.primary_color,
+      logo_url: state.settings.logo_url,
+      mark_url: state.settings.mark_url,
+    };
     state.message = "Settings saved.";
   } catch (error) {
     state.error = error.message;
@@ -1865,6 +2063,7 @@ async function boot() {
   try {
     await loadSetupStatus();
     if (setupComplete()) {
+      await loadBranding();
       await loadProfile();
       if (state.user) {
         await loadSettings({ quiet: true });

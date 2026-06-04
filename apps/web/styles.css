@@ -172,6 +172,16 @@ ul {
   font-weight: 560;
 }
 
+.brand-logo {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #39393f;
+  border-radius: 7px;
+  background: #f4f4ee;
+  object-fit: contain;
+  padding: 4px;
+}
+
 .brand strong,
 h1 {
   color: var(--ink);
@@ -684,6 +694,66 @@ p {
   transform: translateY(-1px);
 }
 
+.logo-upload-card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  min-height: 84px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--field);
+  cursor: pointer;
+  padding: 12px;
+}
+
+.logo-upload-card:hover,
+.logo-upload-card:focus-within {
+  border-color: var(--line);
+}
+
+.logo-upload-card input[type="file"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.logo-upload-preview {
+  display: grid;
+  width: 52px;
+  height: 52px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: #f4f4ee;
+  color: #030304;
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.logo-upload-preview img,
+.brand-preview-mark img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 6px;
+}
+
+.logo-upload-copy {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.logo-upload-copy strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 430;
+}
+
 .form-actions {
   display: flex;
   align-items: center;
@@ -910,6 +980,12 @@ p {
   color: #ffffff;
   font-size: 11px;
   font-weight: 560;
+}
+
+.template-logo-image {
+  width: 42px;
+  max-height: 42px;
+  object-fit: contain;
 }
 
 .template-mail h4 {

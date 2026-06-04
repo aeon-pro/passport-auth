@@ -56,12 +56,21 @@ class DashboardSettingsResponse(BaseModel):
     google_configured: bool
     brand_name: str
     primary_color: str
+    logo_url: str
+    mark_url: str
     password_login_enabled: bool
     otp_login_enabled: bool
     magic_link_enabled: bool
     google_oauth_enabled: bool
     password_reset_otp_enabled: bool
     email_templates: list[EmailTemplateModel]
+
+
+class DashboardBrandingResponse(BaseModel):
+    brand_name: str
+    primary_color: str
+    logo_url: str
+    mark_url: str
 
 
 class DashboardSettingsUpdate(BaseModel):
@@ -75,6 +84,8 @@ class DashboardSettingsUpdate(BaseModel):
     google_client_secret: str | None = Field(default=None, max_length=2048)
     brand_name: str | None = Field(default=None, max_length=80)
     primary_color: str | None = Field(default=None, max_length=32)
+    logo_url: str | None = Field(default=None, max_length=512)
+    mark_url: str | None = Field(default=None, max_length=512)
     password_login_enabled: bool | None = None
     otp_login_enabled: bool | None = None
     magic_link_enabled: bool | None = None
@@ -91,6 +102,8 @@ class DashboardSettingsUpdate(BaseModel):
         "google_client_secret",
         "brand_name",
         "primary_color",
+        "logo_url",
+        "mark_url",
     )
     @classmethod
     def strip_optional_string(cls, value: str | None) -> str | None:
@@ -120,6 +133,8 @@ def build_settings_response(settings: DashboardSettings) -> DashboardSettingsRes
         google_configured=bool(settings.google_client_secret),
         brand_name=settings.brand_name,
         primary_color=settings.primary_color,
+        logo_url=settings.logo_url,
+        mark_url=settings.mark_url,
         password_login_enabled=settings.password_login_enabled,
         otp_login_enabled=settings.otp_login_enabled,
         magic_link_enabled=settings.magic_link_enabled,
@@ -143,12 +158,28 @@ def build_settings_response(settings: DashboardSettings) -> DashboardSettingsRes
     )
 
 
+def build_branding_response(settings: DashboardSettings) -> DashboardBrandingResponse:
+    return DashboardBrandingResponse(
+        brand_name=settings.brand_name,
+        primary_color=settings.primary_color,
+        logo_url=settings.logo_url,
+        mark_url=settings.mark_url,
+    )
+
+
 @router.get("")
 def get_dashboard_settings(
     _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> DashboardSettingsResponse:
     return build_settings_response(setup_store.get_dashboard_settings())
+
+
+@router.get("/branding")
+def get_dashboard_branding(
+    setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+) -> DashboardBrandingResponse:
+    return build_branding_response(setup_store.get_dashboard_settings())
 
 
 @router.put("")

@@ -67,6 +67,8 @@ async def test_dashboard_settings_return_defaults() -> None:
         "google_configured": False,
         "brand_name": "Passport Auth",
         "primary_color": "#f5f5f7",
+        "logo_url": "",
+        "mark_url": "",
         "password_login_enabled": True,
         "otp_login_enabled": False,
         "magic_link_enabled": False,
@@ -123,6 +125,43 @@ async def test_dashboard_settings_return_defaults() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dashboard_branding_is_public_and_only_returns_safe_fields() -> None:
+    setup_store = InMemorySetupStore()
+    setup_store.create_owner(
+        email="owner@example.com",
+        password="correct-horse-battery-staple",
+    )
+    setup_store.save_dashboard_settings(
+        DashboardSettings(
+            brand_name="Alactic",
+            primary_color="#7cffaa",
+            logo_url="/dashboard-assets/logos/primary.png",
+            mark_url="/dashboard-assets/logos/mark.svg",
+            resend_api_key="re_secret_key",
+            google_client_secret="google-client-secret",
+        )
+    )
+    app = create_app(
+        settings=Settings(app_encryption_key="test-jwt-secret"),
+        setup_store=setup_store,
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.get("/api/v1/dashboard/settings/branding")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "brand_name": "Alactic",
+        "primary_color": "#7cffaa",
+        "logo_url": "/dashboard-assets/logos/primary.png",
+        "mark_url": "/dashboard-assets/logos/mark.svg",
+    }
+    assert "re_secret_key" not in response.text
+    assert "google-client-secret" not in response.text
+
+
+@pytest.mark.asyncio
 async def test_dashboard_settings_save_config_without_exposing_secrets() -> None:
     transport = ASGITransport(app=create_test_app())
 
@@ -146,6 +185,8 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
                 "google_client_secret": "google-client-secret",
                 "brand_name": "Acme Auth",
                 "primary_color": "#ffffff",
+                "logo_url": "/dashboard-assets/logos/primary.png",
+                "mark_url": "/dashboard-assets/logos/mark.svg",
                 "password_login_enabled": True,
                 "otp_login_enabled": True,
                 "magic_link_enabled": True,
@@ -171,6 +212,8 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
         "google_configured": True,
         "brand_name": "Acme Auth",
         "primary_color": "#ffffff",
+        "logo_url": "/dashboard-assets/logos/primary.png",
+        "mark_url": "/dashboard-assets/logos/mark.svg",
         "password_login_enabled": True,
         "otp_login_enabled": True,
         "magic_link_enabled": True,

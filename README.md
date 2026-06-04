@@ -61,5 +61,7 @@ For production, set complete connection URLs instead of separate database userna
 - `REDIS_URL`, unless you use the included Redis service
 - `APP_ENCRYPTION_KEY`, kept stable across deploys because it signs dashboard sessions
 - `DASHBOARD_JWT_TTL_SECONDS`, defaults to `31536000` for one-year dashboard sessions
+- `DASHBOARD_ASSET_DIR`, defaults to `/app/data/dashboard-assets` in Compose and is mounted
+  to the `dashboard-assets` volume for uploaded logos
 
 The exposed web service still listens on container port `8000`.

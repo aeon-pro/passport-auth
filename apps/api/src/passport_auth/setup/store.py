@@ -124,6 +124,8 @@ class DashboardSettings:
     google_client_secret: str | None = None
     brand_name: str = "Passport Auth"
     primary_color: str = "#f5f5f7"
+    logo_url: str = ""
+    mark_url: str = ""
     password_login_enabled: bool = True
     otp_login_enabled: bool = False
     magic_link_enabled: bool = False
@@ -479,6 +481,8 @@ def dashboard_settings_from_dict(data: dict[str, object]) -> DashboardSettings:
         google_client_secret=_optional_string(merged["google_client_secret"]),
         brand_name=str(merged["brand_name"]),
         primary_color=str(merged["primary_color"]),
+        logo_url=str(merged["logo_url"]),
+        mark_url=str(merged["mark_url"]),
         password_login_enabled=bool(merged["password_login_enabled"]),
         otp_login_enabled=bool(merged["otp_login_enabled"]),
         magic_link_enabled=bool(merged["magic_link_enabled"]),

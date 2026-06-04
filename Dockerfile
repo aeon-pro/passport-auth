@@ -4,7 +4,8 @@ FROM python:3.13-slim AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    WEB_STATIC_DIR=/app/static
+    WEB_STATIC_DIR=/app/static \
+    DASHBOARD_ASSET_DIR=/app/data/dashboard-assets
 
 WORKDIR /app
 
