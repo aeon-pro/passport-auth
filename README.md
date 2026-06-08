@@ -41,6 +41,12 @@ python3 -m venv .venv
 
 The dashboard is plain static HTML, CSS, and JavaScript in `apps/web`. FastAPI serves those files directly, so there is no frontend package install or build step.
 
+### Local Client App
+
+`examples/local-app` is a tiny standalone app for testing hosted auth flows end to end. It runs
+on `http://localhost:5173`, sends users to Passport Auth hosted pages, exchanges the returned
+authorization code, calls `/api/v1/auth/me`, and supports logout.
+
 ## Public Auth Surface
 
 Hosted pages are available at `/login`, `/register`, `/verify`, and `/reset-password`.

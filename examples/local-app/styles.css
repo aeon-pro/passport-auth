@@ -1,0 +1,273 @@
+:root {
+  color: #f7f7f4;
+  background: #050506;
+  font-family:
+    "Avenir Next", "SF Pro Text", "SF Pro Display", "Helvetica Neue", ui-sans-serif,
+    sans-serif;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  min-height: 100vh;
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 / 64px
+      64px,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px) 0 0 / 64px
+      64px,
+    radial-gradient(circle at 60% 0, rgba(255, 255, 255, 0.07), transparent 440px),
+    #050506;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 8px;
+  background: #f7f7f4;
+  color: #050506;
+  cursor: pointer;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+button:hover,
+button:focus-visible {
+  background: #ffffff;
+  outline: none;
+}
+
+.shell {
+  display: grid;
+  width: min(1040px, calc(100% - 40px));
+  min-height: 100vh;
+  align-content: center;
+  gap: 24px;
+  margin: 0 auto;
+  padding: 48px 0;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 24px;
+  align-items: end;
+}
+
+.eyebrow {
+  color: #8c8c84;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+h1,
+h2,
+p,
+dl {
+  margin: 0;
+}
+
+h1 {
+  max-width: 700px;
+  margin-top: 10px;
+  color: #ffffff;
+  font-size: clamp(44px, 7vw, 78px);
+  font-weight: 360;
+  line-height: 0.96;
+}
+
+h2 {
+  color: #ffffff;
+  font-size: clamp(32px, 5vw, 50px);
+  font-weight: 360;
+  line-height: 1;
+}
+
+p {
+  max-width: 650px;
+  margin-top: 18px;
+  color: #b8b8ae;
+  font-size: 16px;
+  font-weight: 360;
+  line-height: 1.7;
+}
+
+.panel,
+.dashboard,
+.setup-card,
+.auth-base-card {
+  border: 1px solid #25252a;
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 160px),
+    rgba(12, 12, 14, 0.92);
+  box-shadow: 0 24px 90px rgba(0, 0, 0, 0.32);
+}
+
+.panel,
+.dashboard,
+.setup-card {
+  display: grid;
+  gap: 24px;
+  padding: 28px;
+}
+
+.auth-base-card {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+label {
+  display: grid;
+  gap: 8px;
+  color: #eeeeea;
+  font-size: 13px;
+  font-weight: 520;
+}
+
+input {
+  min-height: 44px;
+  width: 100%;
+  border: 1px solid #2c2c33;
+  border-radius: 8px;
+  background: #050506;
+  color: #ffffff;
+  padding: 0 12px;
+}
+
+input:focus {
+  border-color: #9a9aa2;
+  outline: none;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.actions button:nth-child(n + 2) {
+  border: 1px solid #303037;
+  background: rgba(255, 255, 255, 0.03);
+  color: #f7f7f4;
+}
+
+.profile-card {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.avatar {
+  display: grid;
+  width: 62px;
+  height: 62px;
+  flex: 0 0 auto;
+  place-items: center;
+  border: 1px solid #2d2d33;
+  border-radius: 12px;
+  background: #17171b;
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.detail-grid div {
+  display: grid;
+  gap: 8px;
+  min-height: 104px;
+  align-content: start;
+  border: 1px solid #202026;
+  border-radius: 9px;
+  background: #070708;
+  padding: 16px;
+}
+
+.detail-grid span,
+dt {
+  color: #85857d;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.detail-grid strong,
+dd {
+  min-width: 0;
+  margin: 0;
+  color: #f7f7f4;
+  font-size: 15px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.danger {
+  width: fit-content;
+  border: 1px solid #4d2828;
+  background: #1f0d0d;
+  color: #ffb9b9;
+}
+
+.setup-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.setup-card div {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #202026;
+  border-radius: 8px;
+  background: #070708;
+  padding: 14px;
+}
+
+.error,
+.message {
+  max-width: none;
+  margin: 0;
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 13px;
+}
+
+.error {
+  border: 1px solid #5b2d2d;
+  background: #1c0d0d;
+  color: #ffb7ad;
+}
+
+.message {
+  border: 1px solid #234a32;
+  background: #0d2016;
+  color: #ceffdd;
+}
+
+@media (max-width: 840px) {
+  .hero,
+  .detail-grid,
+  .setup-card dl {
+    grid-template-columns: 1fr;
+  }
+}
