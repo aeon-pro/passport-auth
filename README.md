@@ -18,7 +18,7 @@ apps/
   api/        FastAPI application and backend tests
   web/        Static dashboard and hosted auth screens
 Dockerfile   Production web image
-compose.yaml Local and Coolify Compose stack
+docker-compose.yaml Local and Coolify Compose stack
 docs/
   passport-auth-v1-plan.md
 ```
@@ -81,7 +81,7 @@ dashboard settings.
 
 ### Coolify
 
-Use `compose.yaml` as the Docker Compose file. Coolify detects the interpolated variables in the Compose file and adds them to the resource Environment Variables UI.
+Use `docker-compose.yaml` as the Docker Compose file. Coolify detects the interpolated variables in the Compose file and adds them to the resource Environment Variables UI.
 
 For production, set complete connection URLs instead of separate database username/password variables:
 

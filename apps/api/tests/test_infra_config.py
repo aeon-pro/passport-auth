@@ -4,7 +4,7 @@ ROOT = Path(__file__).parents[3]
 
 
 def test_compose_persists_dashboard_uploaded_assets() -> None:
-    compose = (ROOT / "compose.yaml").read_text(encoding="utf-8")
+    compose = (ROOT / "docker-compose.yaml").read_text(encoding="utf-8")
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
