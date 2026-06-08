@@ -10,6 +10,8 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
 
     assert "APP_ENV=${APP_ENV:-production}" in compose
     assert "APP_ENV=development" in env_example
+    assert 'ports:\n      - "8000:8000"' not in compose
+    assert "expose:\n      - \"8000\"" in compose
     assert "DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}" in compose
     assert "dashboard-assets:/app/data/dashboard-assets" in compose
     assert "dashboard-assets:" in compose

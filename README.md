@@ -65,7 +65,11 @@ cp .env.example .env
 docker compose --profile local up --build
 ```
 
-The public service is exposed on `http://localhost:8000` by default. The `local` profile starts local Postgres and ClickHouse services; Redis runs as part of the default stack.
+The web container listens on port `8000` internally. Coolify routes to that internal port through
+its proxy, so the Compose file does not bind a fixed host port. For local Docker-only testing,
+add a temporary port mapping such as `8000:8000` in a local override file or run the FastAPI app
+directly. The `local` profile starts local Postgres and ClickHouse services; Redis runs as part
+of the default stack.
 
 ### Environments
 
