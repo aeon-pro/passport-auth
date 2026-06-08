@@ -9,26 +9,29 @@ services:
       - APP_ENV=${APP_ENV:-production}
       - WEB_STATIC_DIR=/app/static
       - DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}
-      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:?}
+      - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:-passport-auth-change-this-stable-secret}
       - DASHBOARD_JWT_TTL_SECONDS=${DASHBOARD_JWT_TTL_SECONDS:-31536000}
-      - DATABASE_URL=${DATABASE_URL:?}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://${POSTGRES_USER:-passport}:${POSTGRES_PASSWORD:-passport}@postgres:5432/${POSTGRES_DB:-passport_auth}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - CLICKHOUSE_URL=${CLICKHOUSE_URL:?}
+      - CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://${CLICKHOUSE_USER:-passport}:${CLICKHOUSE_PASSWORD:-passport}@clickhouse:8123/${CLICKHOUSE_DB:-passport_auth}}
     expose:
       - "8000"
     volumes:
       - dashboard-assets:/app/data/dashboard-assets
     depends_on:
+      postgres:
+        condition: service_healthy
       redis:
+        condition: service_healthy
+      clickhouse:
         condition: service_healthy
 
   postgres:
     image: postgres:17-alpine
-    profiles: ["local"]
     environment:
-      POSTGRES_DB: passport_auth
-      POSTGRES_USER: passport
-      POSTGRES_PASSWORD: passport
+      POSTGRES_DB: ${POSTGRES_DB:-passport_auth}
+      POSTGRES_USER: ${POSTGRES_USER:-passport}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-passport}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -50,11 +53,10 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:25.3
-    profiles: ["local"]
     environment:
-      CLICKHOUSE_DB: passport_auth
-      CLICKHOUSE_USER: passport
-      CLICKHOUSE_PASSWORD: passport
+      CLICKHOUSE_DB: ${CLICKHOUSE_DB:-passport_auth}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-passport}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-passport}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
     volumes:
       - clickhouse-data:/var/lib/clickhouse

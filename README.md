@@ -62,14 +62,14 @@ Public API routes live under `/api/v1/auth/*`:
 
 ```bash
 cp .env.example .env
-docker compose --profile local up --build
+docker compose up --build
 ```
 
 The web container listens on port `8000` internally. Coolify routes to that internal port through
 its proxy, so the Compose file does not bind a fixed host port. For local Docker-only testing,
 add a temporary port mapping such as `8000:8000` in a local override file or run the FastAPI app
-directly. The `local` profile starts local Postgres and ClickHouse services; Redis runs as part
-of the default stack.
+directly. The default Compose stack starts web, Postgres, Redis, and ClickHouse together with
+persistent named volumes.
 
 ### Environments
 
@@ -85,15 +85,17 @@ dashboard settings.
 
 ### Coolify
 
-Use `docker-compose.yaml` as the Docker Compose file. Coolify detects the interpolated variables in the Compose file and adds them to the resource Environment Variables UI.
+Use `docker-compose.yaml` as the Docker Compose file. It deploys the web service, Postgres,
+Redis, and ClickHouse together, and the web service is wired to the internal service URLs by
+default.
 
-For production, set complete connection URLs instead of separate database username/password variables:
+For production, change these values in Coolify instead of relying on the development defaults:
 
 - `APP_ENV=production`
-- `DATABASE_URL`
-- `CLICKHOUSE_URL`
-- `REDIS_URL`, unless you use the included Redis service
 - `APP_ENCRYPTION_KEY`, kept stable across deploys because it signs dashboard sessions
+- `POSTGRES_PASSWORD`
+- `CLICKHOUSE_PASSWORD`
+- `DATABASE_URL`, `CLICKHOUSE_URL`, or `REDIS_URL` only if you use external services
 - `DASHBOARD_JWT_TTL_SECONDS`, defaults to `31536000` for one-year dashboard sessions
 - `DASHBOARD_ASSET_DIR`, defaults to `/app/data/dashboard-assets` in Compose and is mounted
   to the `dashboard-assets` volume for uploaded logos
