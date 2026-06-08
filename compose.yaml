@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     environment:
-      - APP_ENV=production
+      - APP_ENV=${APP_ENV:-production}
       - WEB_STATIC_DIR=/app/static
       - DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}
       - APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:?}

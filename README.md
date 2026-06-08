@@ -67,12 +67,25 @@ docker compose --profile local up --build
 
 The public service is exposed on `http://localhost:8000` by default. The `local` profile starts local Postgres and ClickHouse services; Redis runs as part of the default stack.
 
+### Environments
+
+Passport Auth uses two intended environments:
+
+- `APP_ENV=development` for local work.
+- `APP_ENV=production` for deployed instances.
+
+Development still runs the same CORS and redirect validation paths, but additionally allows
+localhost callbacks and browser origins such as `http://localhost:5173` and
+`http://127.0.0.1:3000`. Production only allows origins and redirect URLs saved in the
+dashboard settings.
+
 ### Coolify
 
 Use `compose.yaml` as the Docker Compose file. Coolify detects the interpolated variables in the Compose file and adds them to the resource Environment Variables UI.
 
 For production, set complete connection URLs instead of separate database username/password variables:
 
+- `APP_ENV=production`
 - `DATABASE_URL`
 - `CLICKHOUSE_URL`
 - `REDIS_URL`, unless you use the included Redis service

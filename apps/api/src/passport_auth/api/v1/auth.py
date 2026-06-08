@@ -15,6 +15,10 @@ from passport_auth.auth.google import GoogleOAuthClient, GoogleOAuthError
 from passport_auth.auth.store import AuthStore, AuthUser, AuthUserAlreadyExistsError
 from passport_auth.auth.tokens import create_public_access_token, decode_public_access_token
 from passport_auth.core.config import Settings
+from passport_auth.core.environment import (
+    is_development_environment,
+    is_local_development_url,
+)
 from passport_auth.dashboard.tokens import InvalidTokenError
 from passport_auth.setup.passwords import verify_password
 from passport_auth.setup.store import DashboardSettings, SetupStore
@@ -154,12 +158,22 @@ def public_user_response(user: AuthUser) -> PublicUserResponse:
     return PublicUserResponse(id=user.id, email=user.email, role=user.role)
 
 
-def validate_redirect_url(settings: DashboardSettings, redirect_url: str) -> None:
-    if redirect_url not in settings.redirect_urls:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Redirect URL is not allowed.",
-        )
+def validate_redirect_url(
+    dashboard_settings: DashboardSettings,
+    redirect_url: str,
+    *,
+    app_env: str,
+) -> None:
+    if redirect_url in dashboard_settings.redirect_urls:
+        return
+
+    if is_development_environment(app_env) and is_local_development_url(redirect_url):
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail="Redirect URL is not allowed.",
+    )
 
 
 def require_method(enabled: bool, method_name: str) -> None:
@@ -295,7 +309,7 @@ def register(
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_login_enabled, "Password registration")
-    validate_redirect_url(dashboard_settings, payload.redirect_url)
+    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
 
     try:
         user = auth_store.create_user(email=payload.email, password=payload.password)
@@ -323,7 +337,7 @@ def password_login(
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_login_enabled, "Password login")
-    validate_redirect_url(dashboard_settings, payload.redirect_url)
+    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
 
     user = auth_store.get_user_by_email(payload.email)
     if (
@@ -355,7 +369,7 @@ def start_otp(
 ) -> SendStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.otp_login_enabled, "OTP login")
-    validate_redirect_url(dashboard_settings, payload.redirect_url)
+    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
 
     otp = f"{secrets.randbelow(1_000_000):06d}"
     auth_store.create_otp(
@@ -384,7 +398,7 @@ def verify_otp(
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.otp_login_enabled, "OTP login")
-    validate_redirect_url(dashboard_settings, payload.redirect_url)
+    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
 
     if not auth_store.consume_otp(
         email=payload.email,
@@ -417,7 +431,7 @@ def start_magic_link(
 ) -> SendStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.magic_link_enabled, "Magic link")
-    validate_redirect_url(dashboard_settings, payload.redirect_url)
+    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
 
     token = secrets.token_urlsafe(48)
     auth_store.create_magic_link(
@@ -459,7 +473,7 @@ def consume_magic_link(
             detail="Invalid or expired magic link.",
         )
 
-    validate_redirect_url(dashboard_settings, magic_link.redirect_url)
+    validate_redirect_url(dashboard_settings, magic_link.redirect_url, app_env=settings.app_env)
     user = get_or_create_public_user(auth_store, magic_link.email)
     return issue_auth_code(
         auth_store=auth_store,
@@ -534,7 +548,7 @@ def start_google_oauth(
 ) -> GoogleStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.google_oauth_enabled, "Google OAuth")
-    validate_redirect_url(dashboard_settings, redirect_url)
+    validate_redirect_url(dashboard_settings, redirect_url, app_env=settings.app_env)
     if not dashboard_settings.google_client_id or not dashboard_settings.google_client_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -574,7 +588,7 @@ def complete_google_oauth(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OAuth state.",
         )
-    validate_redirect_url(dashboard_settings, oauth_state.redirect_url)
+    validate_redirect_url(dashboard_settings, oauth_state.redirect_url, app_env=settings.app_env)
 
     try:
         profile = google_client.exchange_code(code=code, settings=dashboard_settings)

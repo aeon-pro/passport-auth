@@ -8,6 +8,10 @@ from passport_auth.auth.email import AuthEmailSender, ResendEmailSender
 from passport_auth.auth.google import GoogleOAuthClient, UrlLibGoogleOAuthClient
 from passport_auth.auth.store import AuthStore, create_auth_store
 from passport_auth.core.config import Settings, get_settings
+from passport_auth.core.environment import (
+    is_development_environment,
+    is_local_development_url,
+)
 from passport_auth.setup.store import SetupStore, create_setup_store
 from passport_auth.web.static import mount_dashboard, mount_dashboard_assets
 
@@ -52,8 +56,13 @@ def install_dynamic_cors(app: FastAPI) -> None:
             request.headers.get("Access-Control-Request-Method")
         )
 
+        settings = app.state.settings
         allowed_origins = app.state.setup_store.get_dashboard_settings().allowed_origins
-        if is_api_request and origin and origin in allowed_origins:
+        is_allowed_development_origin = (
+            is_development_environment(settings.app_env) and is_local_development_url(origin or "")
+        )
+        is_allowed_origin = origin in allowed_origins or is_allowed_development_origin
+        if is_api_request and origin and is_allowed_origin:
             response = Response(status_code=204) if is_preflight else await call_next(request)
             response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Methods"] = (

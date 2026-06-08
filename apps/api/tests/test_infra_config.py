@@ -8,6 +8,8 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
 
+    assert "APP_ENV=${APP_ENV:-production}" in compose
+    assert "APP_ENV=development" in env_example
     assert "DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}" in compose
     assert "dashboard-assets:/app/data/dashboard-assets" in compose
     assert "dashboard-assets:" in compose
