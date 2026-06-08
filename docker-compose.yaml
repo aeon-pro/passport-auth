@@ -72,6 +72,10 @@ services:
 
 volumes:
   postgres-data:
+    name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_postgres-data
   redis-data:
+    name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_redis-data
   clickhouse-data:
+    name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_clickhouse-data
   dashboard-assets:
+    name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_dashboard-assets

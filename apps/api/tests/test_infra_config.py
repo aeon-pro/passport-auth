@@ -23,8 +23,12 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "expose:\n      - \"8000\"" in compose
     assert "DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}" in compose
     assert "dashboard-assets:/app/data/dashboard-assets" in compose
-    assert "dashboard-assets:" in compose
+    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_postgres-data" in compose
+    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_redis-data" in compose
+    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_clickhouse-data" in compose
+    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_dashboard-assets" in compose
     assert "DASHBOARD_ASSET_DIR=/app/data/dashboard-assets" in env_example
+    assert "PASSPORT_AUTH_VOLUME_PREFIX=passport-auth" in env_example
     assert "DASHBOARD_ASSET_DIR=/app/data/dashboard-assets" in dockerfile
     assert "POSTGRES_PASSWORD=passport" in env_example
     assert "CLICKHOUSE_PASSWORD=passport" in env_example

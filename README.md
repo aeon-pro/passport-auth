@@ -107,3 +107,16 @@ For production, change these values in Coolify instead of relying on the develop
   to the `dashboard-assets` volume for uploaded logos
 
 The exposed web service still listens on container port `8000`.
+
+Compose volume names are intentionally stable and do not depend on Coolify's generated project
+suffix:
+
+- `passport-auth_postgres-data`
+- `passport-auth_redis-data`
+- `passport-auth_clickhouse-data`
+- `passport-auth_dashboard-assets`
+
+If you already deployed before this stable-volume change and need to keep existing data, set
+`PASSPORT_AUTH_VOLUME_PREFIX` to the existing Coolify volume prefix before redeploying. For
+example, a volume named `pyg7d629exdub1na7gtykje6_postgres-data` needs
+`PASSPORT_AUTH_VOLUME_PREFIX=pyg7d629exdub1na7gtykje6`.
