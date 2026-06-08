@@ -1261,6 +1261,11 @@ function renderAuth() {
 }
 
 function renderHostedAuthPage(path = currentPath()) {
+  if (!setupComplete()) {
+    renderHostedSetupRequired();
+    return;
+  }
+
   const context = hostedAuthContext();
   const needsAuthRequest = path !== "/reset-password" && !(path === "/verify" && context.token);
   const missingContext = needsAuthRequest && !hasHostedAuthRequest();
@@ -1292,6 +1297,29 @@ function renderHostedAuthPage(path = currentPath()) {
         }
         ${renderError()}
         ${renderMessage()}
+      </section>
+    </main>
+  `;
+}
+
+function renderHostedSetupRequired() {
+  app.className = "hosted-auth-shell obsidian-grid";
+  app.innerHTML = `
+    <main class="hosted-auth-main">
+      <div class="hosted-auth-brand">
+        ${brandVisualMarkup(currentBrandName(), { compact: false })}
+        <strong>${escapeHtml(currentBrandName())}</strong>
+      </div>
+      <section class="hosted-auth-card" aria-label="Passport Auth setup required">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Auth service unavailable</span>
+          <h2>Setup required</h2>
+          <p>
+            Passport Auth has not been configured yet. Create the owner account and save
+            the dashboard settings before using hosted auth pages.
+          </p>
+        </div>
+        <a class="primary-action" href="/" data-link>Open setup</a>
       </section>
     </main>
   `;
@@ -1818,13 +1846,13 @@ function render() {
   const path = currentPath();
   const done = setupComplete();
 
-  if (!done) {
-    renderSetup();
+  if (isHostedAuthPath(path)) {
+    renderHostedAuthPage(path);
     return;
   }
 
-  if (isHostedAuthPath(path)) {
-    renderHostedAuthPage(path);
+  if (!done) {
+    renderSetup();
     return;
   }
 

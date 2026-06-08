@@ -214,6 +214,8 @@ def test_static_app_contains_public_hosted_auth_pages() -> None:
     assert "handleHostedGoogleStart" in app_js
     assert "handleHostedPasswordResetConfirm" in app_js
     assert "completeHostedAuth" in app_js
+    assert "renderHostedSetupRequired" in app_js
+    assert app_js.index("if (isHostedAuthPath(path))") < app_js.index("if (!done)")
     assert "hosted-auth-shell" in styles_css
     assert "hosted-auth-card" in styles_css
 
