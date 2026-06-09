@@ -215,6 +215,9 @@ def test_static_app_contains_public_hosted_auth_pages() -> None:
     assert "handleHostedPasswordResetConfirm" in app_js
     assert "completeHostedAuth" in app_js
     assert "renderHostedSetupRequired" in app_js
+    assert "/api/v1/auth/request/validate" in app_js
+    assert "startHostedRequestValidation" in app_js
+    assert "renderHostedInvalidRequest" in app_js
     assert app_js.index("if (isHostedAuthPath(path))") < app_js.index("if (!done)")
     assert "hosted-auth-shell" in styles_css
     assert "hosted-auth-card" in styles_css

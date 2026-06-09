@@ -116,4 +116,6 @@ async def test_production_redirect_validation_rejects_unconfigured_localhost_cal
         )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Redirect URL is not allowed."}
+    assert response.json()["detail"].startswith("Redirect URL is not allowed.")
+    assert "http://localhost:5173/auth/callback" in response.json()["detail"]
+    assert "https://app.example.com/auth/callback" in response.json()["detail"]

@@ -134,6 +134,11 @@ class AuthCodeResponse(BaseModel):
     redirect_url: str
 
 
+class AuthRequestValidationResponse(BaseModel):
+    ok: bool
+    redirect_url: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -208,8 +213,61 @@ def validate_redirect_url(
 
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
-        detail="Redirect URL is not allowed.",
+        detail=redirect_url_error_detail(
+            dashboard_settings,
+            redirect_url,
+            app_env=app_env,
+        ),
     )
+
+
+def redirect_url_error_detail(
+    dashboard_settings: DashboardSettings,
+    redirect_url: str,
+    *,
+    app_env: str,
+) -> str:
+    configured = [url for url in dashboard_settings.redirect_urls if url]
+    if configured:
+        configured_text = ", ".join(configured[:5])
+        if len(configured) > 5:
+            configured_text = f"{configured_text}, ..."
+        return (
+            "Redirect URL is not allowed. "
+            f"Received {redirect_url}. "
+            f"Configured redirect URLs: {configured_text}."
+        )
+
+    if is_development_environment(app_env):
+        return (
+            "Redirect URL is not allowed. "
+            f"Received {redirect_url}. "
+            "Add this exact URL to Redirect URLs, or use a localhost URL in development."
+        )
+
+    return (
+        "Redirect URL is not allowed. "
+        f"Received {redirect_url}. "
+        "Configure this exact URL in Passport Auth Settings."
+    )
+
+
+def validate_pkce_challenge(code_challenge: str) -> None:
+    if not code_challenge:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing PKCE code challenge.",
+        )
+    if len(code_challenge) < 32:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PKCE code challenge is too short.",
+        )
+    if len(code_challenge) > 256:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PKCE code challenge is too long.",
+        )
 
 
 def require_method(enabled: bool, method_name: str) -> None:
@@ -344,6 +402,27 @@ def redirect_with_code(redirect_url: str, authorization_code: str) -> RedirectRe
             parts._replace(query=urllib.parse.urlencode(query)),
         )
     )
+
+
+@router.get("/request/validate")
+def validate_auth_request(
+    settings: Annotated[Settings, Depends(get_settings)],
+    setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    redirect_url: str = Query(default="", max_length=2048),
+    code_challenge: str = Query(default="", max_length=512),
+) -> AuthRequestValidationResponse:
+    redirect_url = redirect_url.strip()
+    code_challenge = code_challenge.strip()
+    if not redirect_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing redirect URL.",
+        )
+
+    validate_pkce_challenge(code_challenge)
+    dashboard_settings = setup_store.get_dashboard_settings()
+    validate_redirect_url(dashboard_settings, redirect_url, app_env=settings.app_env)
+    return AuthRequestValidationResponse(ok=True, redirect_url=redirect_url)
 
 
 @router.post("/register")

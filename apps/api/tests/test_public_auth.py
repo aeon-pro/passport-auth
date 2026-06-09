@@ -195,7 +195,58 @@ async def test_public_auth_rejects_unknown_redirect_url() -> None:
         )
 
     assert response.status_code == 400
-    assert response.json() == {"detail": "Redirect URL is not allowed."}
+    assert response.json()["detail"].startswith("Redirect URL is not allowed.")
+
+
+@pytest.mark.asyncio
+async def test_public_auth_request_validation_reports_redirect_url_mismatch() -> None:
+    setup_store = InMemorySetupStore()
+    setup_store.create_owner(
+        email="owner@example.com",
+        password="correct-horse-battery-staple",
+    )
+    setup_store.save_dashboard_settings(
+        DashboardSettings(
+            app_domain="app.example.com",
+            auth_domain="auth.example.com",
+            allowed_origins=("https://app.example.com",),
+            redirect_urls=("https://app.example.com/auth/callback",),
+            resend_from_email="Passport Auth <auth@example.com>",
+            brand_name="Acme Auth",
+            password_login_enabled=True,
+        )
+    )
+    app = create_app(
+        settings=Settings(app_encryption_key="test-public-auth-secret", app_env="production"),
+        setup_store=setup_store,
+        auth_store=InMemoryAuthStore(),
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        allowed_response = await client.get(
+            "/api/v1/auth/request/validate",
+            params={
+                "redirect_url": "https://app.example.com/auth/callback",
+                "code_challenge": "x" * 43,
+            },
+        )
+        rejected_response = await client.get(
+            "/api/v1/auth/request/validate",
+            params={
+                "redirect_url": "http://localhost:5173/auth/callback",
+                "code_challenge": "x" * 43,
+            },
+        )
+
+    assert allowed_response.status_code == 200
+    assert allowed_response.json() == {
+        "ok": True,
+        "redirect_url": "https://app.example.com/auth/callback",
+    }
+    assert rejected_response.status_code == 400
+    assert "http://localhost:5173/auth/callback" in rejected_response.json()["detail"]
+    assert "https://app.example.com/auth/callback" in rejected_response.json()["detail"]
 
 
 @pytest.mark.asyncio

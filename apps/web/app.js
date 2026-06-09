@@ -98,6 +98,7 @@ const state = {
   hostedResetEmail: "",
   hostedResetDevCode: "",
   hostedMagicDevLink: "",
+  hostedRequestValidation: { key: "", status: "idle", error: "" },
   message: "",
   error: "",
   busy: false,
@@ -606,6 +607,43 @@ function hostedLink(path) {
 function hasHostedAuthRequest() {
   const context = hostedAuthContext();
   return Boolean(context.redirectUrl && context.codeChallenge);
+}
+
+function needsHostedAuthRequest(path, context) {
+  return path !== "/reset-password" && !(path === "/verify" && context.token);
+}
+
+function hostedRequestValidationKey(path, context) {
+  return `${path}|${context.redirectUrl}|${context.codeChallenge}`;
+}
+
+function startHostedRequestValidation(path, context) {
+  const key = hostedRequestValidationKey(path, context);
+  if (state.hostedRequestValidation.key === key) {
+    return state.hostedRequestValidation;
+  }
+
+  state.hostedRequestValidation = { key, status: "loading", error: "" };
+  const query = new URLSearchParams({
+    redirect_url: context.redirectUrl,
+    code_challenge: context.codeChallenge,
+  });
+
+  publicApi(`/api/v1/auth/request/validate?${query.toString()}`)
+    .then(() => {
+      if (state.hostedRequestValidation.key === key) {
+        state.hostedRequestValidation = { key, status: "valid", error: "" };
+        render();
+      }
+    })
+    .catch((error) => {
+      if (state.hostedRequestValidation.key === key) {
+        state.hostedRequestValidation = { key, status: "invalid", error: error.message };
+        render();
+      }
+    });
+
+  return state.hostedRequestValidation;
 }
 
 function navigate(path) {
@@ -1269,8 +1307,12 @@ function renderHostedAuthPage(path = currentPath()) {
   }
 
   const context = hostedAuthContext();
-  const needsAuthRequest = path !== "/reset-password" && !(path === "/verify" && context.token);
+  const needsAuthRequest = needsHostedAuthRequest(path, context);
   const missingContext = needsAuthRequest && !hasHostedAuthRequest();
+  const validation =
+    !missingContext && needsAuthRequest
+      ? startHostedRequestValidation(path, context)
+      : { status: "valid", error: "" };
   const title = {
     "/login": "Sign in",
     "/register": "Create account",
@@ -1295,7 +1337,11 @@ function renderHostedAuthPage(path = currentPath()) {
         ${
           missingContext
             ? renderHostedMissingContext()
-            : renderHostedAuthContent(path, context)
+            : validation.status === "loading"
+              ? renderHostedRequestChecking()
+              : validation.status === "invalid"
+                ? renderHostedInvalidRequest(validation.error)
+                : renderHostedAuthContent(path, context)
         }
         ${renderError()}
         ${renderMessage()}
@@ -1348,6 +1394,25 @@ function renderHostedMissingContext() {
     <div class="hosted-auth-note">
       <strong>Missing auth request</strong>
       <p>This page needs a redirect URL and PKCE challenge from the application.</p>
+    </div>
+  `;
+}
+
+function renderHostedRequestChecking() {
+  return `
+    <div class="hosted-auth-note">
+      <strong>Checking auth request</strong>
+      <p>Passport Auth is validating the redirect URL and PKCE challenge before continuing.</p>
+    </div>
+  `;
+}
+
+function renderHostedInvalidRequest(error) {
+  return `
+    <div class="hosted-auth-note danger">
+      <strong>Invalid auth request</strong>
+      <p>${escapeHtml(error || "The application sent a redirect URL that is not configured.")}</p>
+      <p>Update the app integration or add the exact redirect URL in Passport Auth Settings.</p>
     </div>
   `;
 }

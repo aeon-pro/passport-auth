@@ -1390,6 +1390,15 @@ p {
   font-size: 13px;
 }
 
+.hosted-auth-note.danger {
+  border-color: rgba(255, 126, 112, 0.34);
+  background: rgba(91, 32, 28, 0.18);
+}
+
+.hosted-auth-note.danger strong {
+  color: #ffb0a6;
+}
+
 .hosted-auth-links {
   display: flex;
   flex-wrap: wrap;
