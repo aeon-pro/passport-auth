@@ -1319,7 +1319,6 @@ function renderHostedAuthPage(path = currentPath()) {
     "/verify": context.token ? "Complete sign in" : "Verify code",
     "/reset-password": "Reset password",
   }[path] || "Sign in";
-  const eyebrow = path === "/reset-password" ? "Account recovery" : "Hosted auth";
 
   app.className = "hosted-auth-shell obsidian-grid";
   app.innerHTML = `
@@ -1330,7 +1329,6 @@ function renderHostedAuthPage(path = currentPath()) {
       </div>
       <section class="hosted-auth-card" aria-label="${escapeHtml(title)}">
         <div class="page-heading compact-heading">
-          <span class="eyebrow">${escapeHtml(eyebrow)}</span>
           <h2>${escapeHtml(title)}</h2>
           <p>${escapeHtml(hostedAuthSubtitle(path, Boolean(context.token)))}</p>
         </div>
