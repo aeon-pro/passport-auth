@@ -84,6 +84,12 @@ const state = {
   user: null,
   settings: null,
   branding: null,
+  users: [],
+  usersTotal: 0,
+  usersQuery: "",
+  usersLoaded: false,
+  usersLoading: false,
+  selectedUserId: "",
   settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
@@ -485,6 +491,34 @@ function ownerInitials() {
   return state.user?.email?.slice(0, 2).toUpperCase() || "PA";
 }
 
+function initialsFromUser(user) {
+  const source = user?.name || user?.email || "User";
+  const words = String(source).trim().split(/\s+/).filter(Boolean);
+  const initials = words.length > 1 ? `${words[0][0]}${words[1][0]}` : words[0]?.slice(0, 2);
+  return (initials || "U").toUpperCase();
+}
+
+function selectedUser() {
+  return state.users.find((user) => user.id === state.selectedUserId) || state.users[0] || null;
+}
+
+function stringifyMetadata(value) {
+  return JSON.stringify(value || {}, null, 2);
+}
+
+function parseMetadata(value) {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) {
+    return {};
+  }
+
+  const parsed = JSON.parse(trimmed);
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+    throw new Error("Metadata JSON must be an object.");
+  }
+  return parsed;
+}
+
 async function api(path, options = {}) {
   const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData;
   const response = await fetch(path, {
@@ -566,6 +600,42 @@ async function loadSettings({ quiet = false } = {}) {
     }
   } finally {
     state.settingsLoading = false;
+    if (!quiet) {
+      render();
+    }
+  }
+}
+
+async function loadUsers({ query = state.usersQuery, quiet = false } = {}) {
+  if (!state.token || state.usersLoading) {
+    return;
+  }
+
+  state.usersQuery = query;
+  state.usersLoading = true;
+  if (!quiet) {
+    render();
+  }
+
+  try {
+    const params = new URLSearchParams();
+    if (query) {
+      params.set("query", query);
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : "";
+    const response = await api(`/api/v1/dashboard/users${suffix}`);
+    state.users = response.users || [];
+    state.usersTotal = response.total || state.users.length;
+    state.usersLoaded = true;
+    if (!state.users.some((user) => user.id === state.selectedUserId)) {
+      state.selectedUserId = state.users[0]?.id || "";
+    }
+  } catch (error) {
+    if (!quiet) {
+      state.error = error.message;
+    }
+  } finally {
+    state.usersLoading = false;
     if (!quiet) {
       render();
     }
@@ -1648,6 +1718,159 @@ function renderPlaceholder(title, body) {
   `);
 }
 
+function renderUsers() {
+  if (!state.usersLoaded && !state.usersLoading) {
+    void loadUsers();
+  }
+
+  const user = selectedUser();
+
+  renderAppShell(`
+    <div class="users-route">
+      <header class="settings-intro">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Dashboard</span>
+          <h2>Users</h2>
+          <p>Search, review, update, and deactivate application users. Metadata is custom JSON for app-specific fields like plans and subscriptions.</p>
+        </div>
+        <div class="settings-state">
+          <span class="eyebrow">Directory</span>
+          <strong>${escapeHtml(String(state.usersTotal))} users</strong>
+          <small>${state.usersLoading ? "Refreshing users" : "Public auth users"}</small>
+        </div>
+      </header>
+
+      <div class="users-workspace">
+        <section class="users-list-panel" aria-label="Application users">
+          <form class="users-search" data-form="users-search">
+            <label class="field">
+              <span>Search users</span>
+              <input name="query" type="search" value="${escapeHtml(
+                state.usersQuery,
+              )}" placeholder="Name, email, or role" />
+            </label>
+            <button class="secondary-action" type="submit" ${state.usersLoading ? "disabled" : ""}>
+              ${state.usersLoading ? "Searching..." : "Search"}
+            </button>
+          </form>
+          <div class="user-list" role="list">
+            ${renderUserRows()}
+          </div>
+        </section>
+
+        <section class="user-detail-panel" aria-label="User details">
+          ${user ? renderUserDetail(user) : renderEmptyUserDetail()}
+        </section>
+      </div>
+
+      ${renderError()}
+      ${renderMessage()}
+    </div>
+  `);
+}
+
+function renderUserRows() {
+  if (state.usersLoading && !state.users.length) {
+    return `<p class="form-message">Loading users.</p>`;
+  }
+  if (!state.users.length) {
+    return `<p class="form-message">No users found.</p>`;
+  }
+
+  return state.users
+    .map(
+      (user) => `
+        <button
+          class="user-row ${user.id === state.selectedUserId ? "active" : ""}"
+          type="button"
+          data-action="select-user"
+          data-user-id="${escapeHtml(user.id)}"
+        >
+          <span class="profile-avatar" aria-hidden="true">${escapeHtml(initialsFromUser(user))}</span>
+          <span class="user-row-main">
+            <strong>${escapeHtml(user.name || "Unnamed user")}</strong>
+            <small>${escapeHtml(user.email)}</small>
+          </span>
+          <span class="status-chip ${user.is_active ? "active" : "inactive"}">
+            ${user.is_active ? "Active" : "Inactive"}
+          </span>
+        </button>
+      `,
+    )
+    .join("");
+}
+
+function renderEmptyUserDetail() {
+  return `
+    <div class="panel-heading">
+      <span class="eyebrow">User details</span>
+      <h3>No user selected</h3>
+    </div>
+    <p class="form-message">Create users through hosted auth or service integrations, then manage them here.</p>
+  `;
+}
+
+function renderUserDetail(user) {
+  const metadata = stringifyMetadata(user.user_metadata);
+  return `
+    <form class="user-editor" data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+      <div class="panel-heading">
+        <span class="eyebrow">User details</span>
+        <h3>${escapeHtml(user.name || user.email)}</h3>
+      </div>
+      <div class="form-grid two-columns">
+        <label class="field">
+          <span>Name</span>
+          <input name="name" type="text" value="${escapeHtml(user.name)}" placeholder="Jane Appleseed" />
+        </label>
+        <label class="field">
+          <span>Email</span>
+          <input name="email" type="email" value="${escapeHtml(user.email)}" />
+        </label>
+        <label class="field">
+          <span>Role</span>
+          <select name="role">
+            ${["user", "admin", "owner"]
+              .map(
+                (role) =>
+                  `<option value="${role}" ${user.role === role ? "selected" : ""}>${role}</option>`,
+              )
+              .join("")}
+          </select>
+        </label>
+        <div class="user-flags" aria-label="User status">
+          <label class="toggle-row compact">
+            <input name="is_active" type="checkbox" ${user.is_active ? "checked" : ""} />
+            <span class="toggle-control" aria-hidden="true"></span>
+            <span>Active</span>
+          </label>
+          <label class="toggle-row compact">
+            <input name="email_verified" type="checkbox" ${user.email_verified ? "checked" : ""} />
+            <span class="toggle-control" aria-hidden="true"></span>
+            <span>Email verified</span>
+          </label>
+        </div>
+        <label class="field full-span">
+          <span>Metadata JSON</span>
+          <textarea name="user_metadata" rows="9" spellcheck="false" placeholder='{"plan":"pro"}'>${escapeHtml(
+            metadata,
+          )}</textarea>
+        </label>
+      </div>
+      <div class="user-editor-actions">
+        <button class="secondary-action" type="button" data-action="toggle-user-active" data-user-id="${escapeHtml(
+          user.id,
+        )}" data-next-active="${user.is_active ? "false" : "true"}" ${state.busy ? "disabled" : ""}>
+          ${user.is_active ? "Deactivate" : "Reactivate"}
+        </button>
+        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+          ${state.busy ? "Saving..." : "Save user"}
+        </button>
+      </div>
+    </form>
+  `;
+}
+
 function renderSettings() {
   if (!state.settings && !state.settingsLoading) {
     void loadSettings();
@@ -1957,7 +2180,7 @@ function render() {
   }
 
   if (path === "/users") {
-    renderPlaceholder("Users", "Create, review, and deactivate application users.");
+    renderUsers();
     return;
   }
 
@@ -2580,6 +2803,70 @@ async function handleTemplateSave(form, index) {
   }
 }
 
+async function handleUserSearch(form) {
+  const formData = new FormData(form);
+  const query = String(formData.get("query") || "").trim();
+  state.error = "";
+  state.message = "";
+  await loadUsers({ query });
+}
+
+async function handleUserUpdate(form) {
+  const userId = form.dataset.userId || state.selectedUserId;
+  const formData = new FormData(form);
+  let userMetadata = {};
+  try {
+    userMetadata = parseMetadata(formData.get("user_metadata"));
+  } catch (error) {
+    state.error = error.message;
+    state.message = "";
+    render();
+    return;
+  }
+
+  await updateUser(
+    userId,
+    {
+      name: String(formData.get("name") || "").trim(),
+      email: String(formData.get("email") || "").trim(),
+      role: String(formData.get("role") || "user").trim(),
+      is_active: checkboxValue(formData, "is_active"),
+      email_verified: checkboxValue(formData, "email_verified"),
+      user_metadata: userMetadata,
+    },
+    "User saved.",
+  );
+}
+
+async function updateUser(userId, payload, successMessage) {
+  if (!userId) {
+    state.error = "Select a user first.";
+    render();
+    return;
+  }
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const updatedUser = await api(`/api/v1/dashboard/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    state.users = state.users.map((user) => (user.id === updatedUser.id ? updatedUser : user));
+    state.selectedUserId = updatedUser.id;
+    state.message = successMessage;
+    await loadUsers({ query: state.usersQuery, quiet: true });
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
 function syncColorField(colorField, value) {
   const color = normalizePresetColor(value);
   const valueInput = colorField?.querySelector("[data-color-value]");
@@ -2645,6 +2932,12 @@ app.addEventListener("submit", (event) => {
   if (formName === "settings") {
     void handleSettingsSubmit(form);
   }
+  if (formName === "users-search") {
+    void handleUserSearch(form);
+  }
+  if (formName === "user-update") {
+    void handleUserUpdate(form);
+  }
 });
 
 app.addEventListener("click", (event) => {
@@ -2673,6 +2966,9 @@ app.addEventListener("click", (event) => {
     state.token = null;
     state.user = null;
     state.settings = null;
+    state.users = [];
+    state.usersLoaded = false;
+    state.selectedUserId = "";
     state.authMode = "login";
     state.message = "";
     state.error = "";
@@ -2709,6 +3005,19 @@ app.addEventListener("click", (event) => {
     const index = Number.parseInt(actionButton.dataset.templateIndex || "", 10);
     if (form && Number.isInteger(index)) {
       void handleTemplateSave(form, index);
+    }
+  }
+  if (action === "select-user") {
+    state.selectedUserId = actionButton.dataset.userId || "";
+    state.error = "";
+    state.message = "";
+    render();
+  }
+  if (action === "toggle-user-active") {
+    const userId = actionButton.dataset.userId || "";
+    const isActive = actionButton.dataset.nextActive === "true";
+    if (userId) {
+      void updateUser(userId, { is_active: isActive }, isActive ? "User reactivated." : "User deactivated.");
     }
   }
   if (action === "hosted-google-start") {

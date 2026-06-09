@@ -198,6 +198,21 @@ def test_dashboard_contains_email_templates_page() -> None:
     assert "template-tabs" in styles_css
 
 
+def test_dashboard_contains_users_management_page() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "renderUsers" in app_js
+    assert "/api/v1/dashboard/users" in app_js
+    assert "handleUserSearch" in app_js
+    assert "handleUserUpdate" in app_js
+    assert "user_metadata" in app_js
+    assert "Metadata JSON" in app_js
+    assert "Deactivate" in app_js
+    assert "users-workspace" in styles_css
+    assert "user-detail-panel" in styles_css
+
+
 def test_static_app_contains_public_hosted_auth_pages() -> None:
     app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")

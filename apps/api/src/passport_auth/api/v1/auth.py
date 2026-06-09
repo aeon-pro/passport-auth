@@ -4,7 +4,7 @@ import hmac
 import secrets
 import time
 import urllib.parse
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
@@ -127,6 +127,7 @@ class PublicUserResponse(BaseModel):
     email: str
     role: str
     email_verified: bool
+    user_metadata: dict[str, Any]
 
 
 class AuthCodeResponse(BaseModel):
@@ -189,6 +190,7 @@ def public_user_response(user: AuthUser) -> PublicUserResponse:
         email=user.email,
         role=user.role,
         email_verified=user.email_verified,
+        user_metadata=user.user_metadata or {},
     )
 
 
@@ -346,6 +348,14 @@ def get_or_create_public_user(
             ) or existing_user
         return existing_user
     return auth_store.create_user(email=email, name=name, email_verified=True)
+
+
+def require_active_user(user: AuthUser) -> None:
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is deactivated.",
+        )
 
 
 def send_auth_email(
@@ -536,6 +546,7 @@ def password_login(
             detail="Invalid email or password.",
         )
 
+    require_active_user(user)
     return issue_auth_code(
         auth_store=auth_store,
         settings=settings,
@@ -598,6 +609,7 @@ def verify_otp(
         )
 
     user = get_or_create_public_user(auth_store, payload.email)
+    require_active_user(user)
     return issue_auth_code(
         auth_store=auth_store,
         settings=settings,
@@ -661,6 +673,7 @@ def consume_magic_link(
 
     validate_redirect_url(dashboard_settings, magic_link.redirect_url, app_env=settings.app_env)
     user = get_or_create_public_user(auth_store, magic_link.email)
+    require_active_user(user)
     return issue_auth_code(
         auth_store=auth_store,
         settings=settings,
@@ -797,6 +810,7 @@ def complete_google_oauth(
         email,
         name=normalize_display_name(google_name) if google_name else None,
     )
+    require_active_user(user)
     auth_code = issue_auth_code(
         auth_store=auth_store,
         settings=settings,
@@ -823,11 +837,12 @@ def exchange_token(
         )
 
     user = auth_store.get_user_by_id(auth_code.user_id)
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not active.",
         )
+    require_active_user(user)
 
     return issue_token_pair(auth_store=auth_store, settings=settings, user=user)
 
@@ -849,11 +864,12 @@ def refresh(
         )
 
     user = auth_store.get_user_by_id(refresh_token.user_id)
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not active.",
         )
+    require_active_user(user)
 
     return issue_token_pair(auth_store=auth_store, settings=settings, user=user)
 
@@ -887,7 +903,8 @@ def me(
         ) from exc
 
     user = auth_store.get_user_by_id(str(payload["sub"]))
-    if not user or not user.is_active:
+    if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
+    require_active_user(user)
 
     return public_user_response(user)

@@ -169,6 +169,7 @@ async def test_public_password_register_requires_email_otp_before_issuing_auth_c
         "email": "user@example.com",
         "role": "user",
         "email_verified": True,
+        "user_metadata": {},
     }
     assert token_response.json()["refresh_token"]
     assert me_response.status_code == 200

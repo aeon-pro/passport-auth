@@ -46,7 +46,8 @@ body::selection {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
@@ -638,7 +639,8 @@ p {
 }
 
 .field input,
-.field textarea {
+.field textarea,
+.field select {
   min-height: 45px;
   width: 100%;
   border: 1px solid #29292f;
@@ -660,9 +662,14 @@ p {
 }
 
 .field input:focus,
-.field textarea:focus {
+.field textarea:focus,
+.field select:focus {
   border-color: #8a8a92;
   outline: none;
+}
+
+.field select {
+  appearance: none;
 }
 
 .color-field {
@@ -818,10 +825,129 @@ p {
 
 .settings-route,
 .settings-matrix,
-.templates-route {
+.templates-route,
+.users-route {
   display: grid;
   max-width: 1120px;
   gap: 22px;
+}
+
+.users-workspace {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.86fr) minmax(420px, 1.14fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.users-list-panel,
+.user-detail-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), transparent 130px),
+    rgba(10, 10, 12, 0.86);
+  padding: 18px;
+}
+
+.users-search {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.user-list {
+  display: grid;
+  gap: 8px;
+}
+
+.user-row {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 62px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 10px;
+}
+
+.user-row:hover,
+.user-row:focus-visible,
+.user-row.active {
+  border-color: var(--line-soft);
+  background: rgba(255, 255, 255, 0.026);
+  outline: none;
+}
+
+.user-row-main {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.user-row-main strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 430;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-row-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  font-weight: 560;
+  padding: 4px 8px;
+}
+
+.status-chip.active {
+  border-color: rgba(124, 255, 170, 0.28);
+  color: var(--signal);
+}
+
+.status-chip.inactive {
+  border-color: rgba(255, 178, 166, 0.28);
+  color: var(--warning);
+}
+
+.user-editor {
+  display: grid;
+  gap: 18px;
+}
+
+.user-flags {
+  display: grid;
+  gap: 8px;
+  align-content: end;
+}
+
+.toggle-row.compact {
+  min-height: 45px;
+}
+
+.full-span {
+  grid-column: 1 / -1;
+}
+
+.user-editor-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .settings-intro {
@@ -1486,7 +1612,8 @@ p {
 
   .hero,
   .dashboard-command,
-  .settings-intro {
+  .settings-intro,
+  .users-workspace {
     grid-template-columns: 1fr;
   }
 }
@@ -1511,6 +1638,7 @@ p {
   .metric-grid,
   .signal-grid,
   .nav,
+  .users-search,
   .form-grid.two-columns,
   .toggle-grid,
   .welcome-panel,
@@ -1551,6 +1679,19 @@ p {
 
 @media (max-width: 520px) {
   .form-actions {
+    display: grid;
+  }
+
+  .user-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+  }
+
+  .status-chip {
+    grid-column: 2;
+    width: fit-content;
+  }
+
+  .user-editor-actions {
     display: grid;
   }
 

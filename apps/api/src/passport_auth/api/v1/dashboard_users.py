@@ -1,0 +1,125 @@
+import json
+from typing import Annotated, Any
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from pydantic import BaseModel, Field, field_validator
+
+from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user
+from passport_auth.auth.store import AuthStore, AuthUser, AuthUserAlreadyExistsError
+from passport_auth.setup.store import OwnerAccount
+
+router = APIRouter(prefix="/dashboard/users", tags=["dashboard-users"])
+
+ALLOWED_USER_ROLES = {"owner", "admin", "user"}
+MAX_METADATA_BYTES = 16_384
+
+
+class DashboardUserResponse(BaseModel):
+    id: str
+    email: str
+    name: str
+    role: str
+    is_active: bool
+    email_verified: bool
+    user_metadata: dict[str, Any]
+
+
+class DashboardUsersResponse(BaseModel):
+    users: list[DashboardUserResponse]
+    total: int
+
+
+class DashboardUserUpdate(BaseModel):
+    email: str | None = Field(default=None, min_length=3, max_length=320)
+    name: str | None = Field(default=None, max_length=120)
+    role: str | None = Field(default=None, max_length=32)
+    is_active: bool | None = None
+    email_verified: bool | None = None
+    user_metadata: dict[str, Any] | None = None
+
+    @field_validator("email", "name", "role")
+    @classmethod
+    def strip_optional_string(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip()
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip().lower()
+
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if normalized not in ALLOWED_USER_ROLES:
+            raise ValueError("Role must be owner, admin, or user.")
+        return normalized
+
+    @field_validator("user_metadata")
+    @classmethod
+    def validate_user_metadata(cls, value: dict[str, Any] | None) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        encoded = json.dumps(value, separators=(",", ":"), sort_keys=True)
+        if len(encoded.encode("utf-8")) > MAX_METADATA_BYTES:
+            raise ValueError("User metadata must be 16 KB or smaller.")
+        return value
+
+
+def get_auth_store(request: Request) -> AuthStore:
+    return request.app.state.auth_store
+
+
+def build_user_response(user: AuthUser) -> DashboardUserResponse:
+    return DashboardUserResponse(
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        role=user.role,
+        is_active=user.is_active,
+        email_verified=user.email_verified,
+        user_metadata=user.user_metadata or {},
+    )
+
+
+@router.get("")
+def list_dashboard_users(
+    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    query: str = Query(default="", max_length=120),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> DashboardUsersResponse:
+    users, total = auth_store.list_users(query=query, limit=limit, offset=offset)
+    return DashboardUsersResponse(
+        users=[build_user_response(user) for user in users],
+        total=total,
+    )
+
+
+@router.patch("/{user_id}")
+def update_dashboard_user(
+    user_id: str,
+    payload: DashboardUserUpdate,
+    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+) -> DashboardUserResponse:
+    updates = payload.model_dump(exclude_unset=True)
+    try:
+        user = auth_store.update_user(user_id=user_id, **updates)
+    except AuthUserAlreadyExistsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists.",
+        ) from exc
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    return build_user_response(user)

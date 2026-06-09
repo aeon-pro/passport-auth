@@ -2,7 +2,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
-from typing import Protocol
+from typing import Any, Protocol
 from uuid import uuid4
 
 from passport_auth.setup.passwords import hash_password, verify_password
@@ -21,6 +21,7 @@ class AuthUser:
     role: str = "user"
     is_active: bool = True
     email_verified: bool = True
+    user_metadata: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -71,11 +72,20 @@ class AuthStore(Protocol):
         password: str | None = None,
         password_hash: str | None = None,
         email_verified: bool = True,
+        user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser: ...
 
     def get_user_by_email(self, email: str) -> AuthUser | None: ...
 
     def get_user_by_id(self, user_id: str) -> AuthUser | None: ...
+
+    def list_users(
+        self,
+        *,
+        query: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[AuthUser], int]: ...
 
     def update_user_password(self, *, email: str, password: str) -> None: ...
 
@@ -85,6 +95,18 @@ class AuthStore(Protocol):
         email: str,
         name: str | None = None,
         email_verified: bool | None = None,
+    ) -> AuthUser | None: ...
+
+    def update_user(
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        name: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+        user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser | None: ...
 
     def create_pending_registration(
@@ -157,6 +179,12 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+def normalize_user_metadata(value: dict[str, Any] | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    return dict(value)
+
+
 class InMemoryAuthStore:
     def __init__(self) -> None:
         self.users_by_id: dict[str, AuthUser] = {}
@@ -176,6 +204,7 @@ class InMemoryAuthStore:
         password: str | None = None,
         password_hash: str | None = None,
         email_verified: bool = True,
+        user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser:
         normalized_email = email.strip().lower()
         if normalized_email in self.users_by_email:
@@ -187,6 +216,7 @@ class InMemoryAuthStore:
             name=name or "",
             password_hash=password_hash or (hash_password(password) if password else None),
             email_verified=email_verified,
+            user_metadata=normalize_user_metadata(user_metadata),
         )
         self.users_by_id[user.id] = user
         self.users_by_email[user.email] = user
@@ -197,6 +227,27 @@ class InMemoryAuthStore:
 
     def get_user_by_id(self, user_id: str) -> AuthUser | None:
         return self.users_by_id.get(user_id)
+
+    def list_users(
+        self,
+        *,
+        query: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[AuthUser], int]:
+        normalized_query = query.strip().lower()
+        users = list(self.users_by_id.values())
+        if normalized_query:
+            users = [
+                user
+                for user in users
+                if normalized_query in user.email.lower()
+                or normalized_query in user.name.lower()
+                or normalized_query in user.role.lower()
+            ]
+
+        users.sort(key=lambda user: user.email)
+        return users[offset : offset + limit], len(users)
 
     def update_user_password(self, *, email: str, password: str) -> None:
         user = self.get_user_by_email(email)
@@ -211,6 +262,7 @@ class InMemoryAuthStore:
             role=user.role,
             is_active=user.is_active,
             email_verified=user.email_verified,
+            user_metadata=normalize_user_metadata(user.user_metadata),
         )
         self.users_by_id[user.id] = updated
         self.users_by_email[user.email] = updated
@@ -234,11 +286,51 @@ class InMemoryAuthStore:
             role=user.role,
             is_active=user.is_active,
             email_verified=email_verified if email_verified is not None else user.email_verified,
+            user_metadata=normalize_user_metadata(user.user_metadata),
         )
         self.users_by_id[user.id] = updated
         self.users_by_email[user.email] = updated
         return updated
 
+    def update_user(
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        name: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+        user_metadata: dict[str, Any] | None = None,
+    ) -> AuthUser | None:
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+
+        normalized_email = email.strip().lower() if email is not None else user.email
+        existing = self.users_by_email.get(normalized_email)
+        if existing and existing.id != user.id:
+            raise AuthUserAlreadyExistsError
+
+        updated = AuthUser(
+            id=user.id,
+            email=normalized_email,
+            name=name if name is not None else user.name,
+            password_hash=user.password_hash,
+            role=role if role is not None else user.role,
+            is_active=is_active if is_active is not None else user.is_active,
+            email_verified=email_verified if email_verified is not None else user.email_verified,
+            user_metadata=(
+                normalize_user_metadata(user_metadata)
+                if user_metadata is not None
+                else normalize_user_metadata(user.user_metadata)
+            ),
+        )
+        if updated.email != user.email:
+            del self.users_by_email[user.email]
+        self.users_by_id[user.id] = updated
+        self.users_by_email[updated.email] = updated
+        return updated
 
     def create_pending_registration(
         self,
@@ -391,6 +483,7 @@ class PostgresAuthStore:
         password: str | None = None,
         password_hash: str | None = None,
         email_verified: bool = True,
+        user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser:
         self._ensure_schema()
         user = AuthUser(
@@ -399,15 +492,27 @@ class PostgresAuthStore:
             name=name or "",
             password_hash=password_hash or (hash_password(password) if password else None),
             email_verified=email_verified,
+            user_metadata=normalize_user_metadata(user_metadata),
         )
         try:
             with self._connect() as conn:
                 with conn.transaction():
+                    from psycopg.types.json import Jsonb
+
                     conn.execute(
                         """
                         INSERT INTO auth_users
-                            (id, email, name, password_hash, role, is_active, email_verified)
-                        VALUES (%s, %s, %s, %s, 'user', true, %s)
+                            (
+                                id,
+                                email,
+                                name,
+                                password_hash,
+                                role,
+                                is_active,
+                                email_verified,
+                                user_metadata
+                            )
+                        VALUES (%s, %s, %s, %s, 'user', true, %s, %s)
                         """,
                         (
                             user.id,
@@ -415,6 +520,7 @@ class PostgresAuthStore:
                             user.name,
                             user.password_hash,
                             user.email_verified,
+                            Jsonb(user.user_metadata or {}),
                         ),
                     )
         except Exception as exc:
@@ -428,7 +534,15 @@ class PostgresAuthStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id::text, email, name, password_hash, role, is_active, email_verified
+                SELECT
+                    id::text,
+                    email,
+                    name,
+                    password_hash,
+                    role,
+                    is_active,
+                    email_verified,
+                    user_metadata
                 FROM auth_users
                 WHERE email = %s
                 LIMIT 1
@@ -442,7 +556,15 @@ class PostgresAuthStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id::text, email, name, password_hash, role, is_active, email_verified
+                SELECT
+                    id::text,
+                    email,
+                    name,
+                    password_hash,
+                    role,
+                    is_active,
+                    email_verified,
+                    user_metadata
                 FROM auth_users
                 WHERE id = %s
                 LIMIT 1
@@ -450,6 +572,66 @@ class PostgresAuthStore:
                 (user_id,),
             ).fetchone()
         return _auth_user_from_row(row)
+
+    def list_users(
+        self,
+        *,
+        query: str = "",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> tuple[list[AuthUser], int]:
+        self._ensure_schema()
+        normalized_query = query.strip()
+        pattern = f"%{normalized_query}%"
+        with self._connect() as conn:
+            if normalized_query:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        id::text,
+                        email,
+                        name,
+                        password_hash,
+                        role,
+                        is_active,
+                        email_verified,
+                        user_metadata
+                    FROM auth_users
+                    WHERE email ILIKE %s OR name ILIKE %s OR role ILIKE %s
+                    ORDER BY created_at DESC, email ASC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (pattern, pattern, pattern, limit, offset),
+                ).fetchall()
+                total_row = conn.execute(
+                    """
+                    SELECT count(*)
+                    FROM auth_users
+                    WHERE email ILIKE %s OR name ILIKE %s OR role ILIKE %s
+                    """,
+                    (pattern, pattern, pattern),
+                ).fetchone()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        id::text,
+                        email,
+                        name,
+                        password_hash,
+                        role,
+                        is_active,
+                        email_verified,
+                        user_metadata
+                    FROM auth_users
+                    ORDER BY created_at DESC, email ASC
+                    LIMIT %s OFFSET %s
+                    """,
+                    (limit, offset),
+                ).fetchall()
+                total_row = conn.execute("SELECT count(*) FROM auth_users").fetchone()
+
+        return [user for row in rows if (user := _auth_user_from_row(row))], int(total_row[0])
 
     def update_user_password(self, *, email: str, password: str) -> None:
         self._ensure_schema()
@@ -480,10 +662,72 @@ class PostgresAuthStore:
                     SET name = COALESCE(%s, name),
                         email_verified = COALESCE(%s, email_verified)
                     WHERE email = %s
-                    RETURNING id::text, email, name, password_hash, role, is_active, email_verified
+                    RETURNING
+                        id::text,
+                        email,
+                        name,
+                        password_hash,
+                        role,
+                        is_active,
+                        email_verified,
+                        user_metadata
                     """,
                     (name, email_verified, email.strip().lower()),
                 ).fetchone()
+
+        return _auth_user_from_row(row)
+
+    def update_user(
+        self,
+        *,
+        user_id: str,
+        email: str | None = None,
+        name: str | None = None,
+        role: str | None = None,
+        is_active: bool | None = None,
+        email_verified: bool | None = None,
+        user_metadata: dict[str, Any] | None = None,
+    ) -> AuthUser | None:
+        self._ensure_schema()
+        try:
+            with self._connect() as conn:
+                with conn.transaction():
+                    from psycopg.types.json import Jsonb
+
+                    row = conn.execute(
+                        """
+                        UPDATE auth_users
+                        SET email = COALESCE(%s, email),
+                            name = COALESCE(%s, name),
+                            role = COALESCE(%s, role),
+                            is_active = COALESCE(%s, is_active),
+                            email_verified = COALESCE(%s, email_verified),
+                            user_metadata = COALESCE(%s, user_metadata)
+                        WHERE id = %s
+                        RETURNING
+                            id::text,
+                            email,
+                            name,
+                            password_hash,
+                            role,
+                            is_active,
+                            email_verified,
+                            user_metadata
+                        """,
+                        (
+                            email.strip().lower() if email is not None else None,
+                            name,
+                            role,
+                            is_active,
+                            email_verified,
+                            Jsonb(user_metadata) if user_metadata is not None else None,
+                            user_id,
+                        ),
+                    ).fetchone()
+        except Exception as exc:
+            if "auth_users_email_key" in str(exc):
+                raise AuthUserAlreadyExistsError from exc
+            raise
 
         return _auth_user_from_row(row)
 
@@ -850,6 +1094,7 @@ class PostgresAuthStore:
                             role TEXT NOT NULL DEFAULT 'user',
                             is_active BOOLEAN NOT NULL DEFAULT true,
                             email_verified BOOLEAN NOT NULL DEFAULT true,
+                            user_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
                         """
@@ -864,6 +1109,12 @@ class PostgresAuthStore:
                         """
                         ALTER TABLE auth_users
                         ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT true
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS user_metadata JSONB NOT NULL DEFAULT '{}'::jsonb
                         """
                     )
                     conn.execute(
@@ -965,6 +1216,7 @@ def _auth_user_from_row(row) -> AuthUser | None:
         role=row[4],
         is_active=bool(row[5]),
         email_verified=bool(row[6]),
+        user_metadata=normalize_user_metadata(row[7] if len(row) > 7 else None),
     )
 
 
