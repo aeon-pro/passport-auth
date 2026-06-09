@@ -243,6 +243,7 @@ def test_static_app_contains_public_hosted_auth_pages() -> None:
     assert "handleHostedRegister" in app_js
     assert "handleHostedOtpStart" in app_js
     assert "handleHostedMagicConsume" in app_js
+    assert "startHostedMagicConsume" in app_js
     assert "handleHostedGoogleStart" in app_js
     assert "handleHostedPasswordResetConfirm" in app_js
     assert "completeHostedAuth" in app_js
@@ -255,6 +256,16 @@ def test_static_app_contains_public_hosted_auth_pages() -> None:
     assert app_js.index("if (isHostedAuthPath(path))") < app_js.index("if (!done)")
     assert "hosted-auth-shell" in styles_css
     assert "hosted-auth-card" in styles_css
+
+
+def test_magic_link_hosted_page_auto_consumes_without_continue_step() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert "Completing sign in" in app_js
+    assert "startHostedMagicConsume" in app_js
+    assert "data-action=\"hosted-magic-consume\"" not in app_js
+    assert "Magic link ready" not in app_js
+    assert "Continue to verify the link" not in app_js
 
 
 def test_email_template_cards_have_individual_save_actions() -> None:

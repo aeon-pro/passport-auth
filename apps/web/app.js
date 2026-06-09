@@ -105,6 +105,7 @@ const state = {
   hostedResetEmail: "",
   hostedResetDevCode: "",
   hostedMagicDevLink: "",
+  hostedMagicConsumeKey: "",
   hostedRequestValidation: { key: "", status: "idle", error: "" },
   message: "",
   error: "",
@@ -686,6 +687,15 @@ function needsHostedAuthRequest(path, context) {
 
 function hostedRequestValidationKey(path, context) {
   return `${path}|${context.redirectUrl}|${context.codeChallenge}`;
+}
+
+function startHostedMagicConsume(context) {
+  if (!context.token || state.busy || state.hostedMagicConsumeKey === context.token) {
+    return;
+  }
+
+  state.hostedMagicConsumeKey = context.token;
+  void handleHostedMagicConsume(context.token);
 }
 
 function startHostedRequestValidation(path, context) {
@@ -1417,6 +1427,10 @@ function renderHostedAuthPage(path = currentPath()) {
       </section>
     </main>
   `;
+
+  if (path === "/verify" && context.token && !missingContext && validation.status === "valid") {
+    startHostedMagicConsume(context);
+  }
 }
 
 function renderHostedSetupRequired() {
@@ -1535,13 +1549,8 @@ function renderHostedAuthContent(path, context) {
   if (path === "/verify" && context.token) {
     return `
       <div class="hosted-auth-note">
-        <strong>Magic link ready</strong>
-        <p>Continue to verify the link and return to your application.</p>
-      </div>
-      <div class="form-actions">
-        <button class="primary-action" type="button" data-action="hosted-magic-consume" ${state.busy ? "disabled" : ""}>
-          ${state.busy ? "Verifying..." : "Continue"}
-        </button>
+        <strong>Completing sign in</strong>
+        <p>Verifying your magic link and returning to your application.</p>
       </div>
     `;
   }
@@ -2714,7 +2723,7 @@ async function handleHostedMagicStart(form) {
   }
 }
 
-async function handleHostedMagicConsume() {
+async function handleHostedMagicConsume(token = hostedAuthContext().token) {
   const context = hostedAuthContext();
 
   state.busy = true;
@@ -2725,7 +2734,7 @@ async function handleHostedMagicConsume() {
   try {
     const authCode = await publicApi("/api/v1/auth/magic-link/consume", {
       method: "POST",
-      body: JSON.stringify({ token: context.token }),
+      body: JSON.stringify({ token: token || context.token }),
     });
     completeHostedAuth(authCode);
   } catch (error) {
