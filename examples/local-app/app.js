@@ -2,6 +2,7 @@ const AUTH_BASE_KEY = "passport-local-auth-base";
 const ACCESS_TOKEN_KEY = "passport-local-access-token";
 const REFRESH_TOKEN_KEY = "passport-local-refresh-token";
 const PKCE_VERIFIER_KEY = "passport-local-pkce-verifier";
+const PKCE_VERIFIER_TTL_MS = 15 * 60 * 1000;
 
 const app = document.querySelector("#app");
 const defaultAuthBase = "http://localhost:8000";
@@ -79,8 +80,36 @@ function randomBase64Url(byteLength = 48) {
 
 async function createPkceChallenge() {
   const verifier = randomBase64Url(64);
-  sessionStorage.setItem(PKCE_VERIFIER_KEY, verifier);
+  localStorage.setItem(
+    PKCE_VERIFIER_KEY,
+    JSON.stringify({ verifier, createdAt: Date.now() }),
+  );
   return sha256Base64Url(verifier);
+}
+
+function readStoredPkceVerifier() {
+  const raw = localStorage.getItem(PKCE_VERIFIER_KEY);
+  if (!raw) {
+    return "";
+  }
+
+  try {
+    const stored = JSON.parse(raw);
+    const verifier = String(stored.verifier || "");
+    const createdAt = Number(stored.createdAt || 0);
+    if (!verifier || !createdAt || Date.now() - createdAt > PKCE_VERIFIER_TTL_MS) {
+      clearStoredPkceVerifier();
+      return "";
+    }
+    return verifier;
+  } catch {
+    clearStoredPkceVerifier();
+    return "";
+  }
+}
+
+function clearStoredPkceVerifier() {
+  localStorage.removeItem(PKCE_VERIFIER_KEY);
 }
 
 async function api(path, options = {}) {
@@ -142,7 +171,7 @@ async function exchangeCallbackCode() {
     return;
   }
 
-  const verifier = sessionStorage.getItem(PKCE_VERIFIER_KEY);
+  const verifier = readStoredPkceVerifier();
   if (!verifier) {
     state.error = "Missing PKCE verifier. Start the sign-in flow again.";
     return;
@@ -157,7 +186,7 @@ async function exchangeCallbackCode() {
   state.refreshToken = token.refresh_token;
   localStorage.setItem(ACCESS_TOKEN_KEY, state.accessToken);
   localStorage.setItem(REFRESH_TOKEN_KEY, state.refreshToken);
-  sessionStorage.removeItem(PKCE_VERIFIER_KEY);
+  clearStoredPkceVerifier();
   window.history.replaceState({}, "", "/");
 }
 
@@ -226,6 +255,7 @@ function clearSession() {
   state.user = null;
   localStorage.removeItem(ACCESS_TOKEN_KEY);
   localStorage.removeItem(REFRESH_TOKEN_KEY);
+  clearStoredPkceVerifier();
 }
 
 function saveAuthBase(form) {

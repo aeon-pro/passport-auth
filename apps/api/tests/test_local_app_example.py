@@ -22,3 +22,14 @@ def test_local_app_example_contains_hosted_auth_integration() -> None:
     assert "code_challenge" in app_js
     assert "code_verifier" in app_js
     assert 'pathname === "/auth/callback"' in server_js
+
+
+def test_local_app_persists_pkce_for_magic_link_callbacks() -> None:
+    app_js = (LOCAL_APP_DIR / "app.js").read_text(encoding="utf-8")
+
+    assert "PKCE_VERIFIER_TTL_MS" in app_js
+    assert "readStoredPkceVerifier" in app_js
+    assert "clearStoredPkceVerifier" in app_js
+    assert "localStorage.setItem(" in app_js
+    assert "PKCE_VERIFIER_KEY," in app_js
+    assert "sessionStorage.setItem(PKCE_VERIFIER_KEY" not in app_js
