@@ -5,6 +5,8 @@ from typing import Protocol
 
 from passport_auth.setup.store import DashboardSettings, EmailTemplate
 
+RESEND_USER_AGENT = "PassportAuth/0.1 (+https://github.com/aeon-pro/passport-auth)"
+
 
 class EmailDeliveryError(Exception):
     """Raised when an auth email cannot be delivered."""
@@ -46,8 +48,10 @@ class ResendEmailSender:
             "https://api.resend.com/emails",
             data=json.dumps(payload).encode("utf-8"),
             headers={
+                "Accept": "application/json",
                 "Authorization": f"Bearer {settings.resend_api_key}",
                 "Content-Type": "application/json",
+                "User-Agent": RESEND_USER_AGENT,
             },
             method="POST",
         )
