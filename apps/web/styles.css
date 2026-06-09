@@ -988,6 +988,38 @@ p {
   gap: 18px;
 }
 
+.user-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.user-activity-grid div {
+  display: grid;
+  min-height: 86px;
+  align-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 14px;
+}
+
+.user-activity-grid span {
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.user-activity-grid strong {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 420;
+  line-height: 1.35;
+}
+
 .user-flags {
   display: grid;
   gap: 8px;
@@ -1676,7 +1708,8 @@ p {
   .hero,
   .dashboard-command,
   .settings-intro,
-  .users-workspace {
+  .users-workspace,
+  .user-activity-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -1703,6 +1736,7 @@ p {
   .nav,
   .users-search,
   .form-grid.two-columns,
+  .user-activity-grid,
   .toggle-grid,
   .welcome-panel,
   .review-grid {

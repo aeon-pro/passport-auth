@@ -286,6 +286,7 @@ def issue_auth_code(
     auth_store: AuthStore,
     settings: Settings,
     user: AuthUser,
+    auth_method: str,
     redirect_url: str,
     code_challenge: str,
 ) -> AuthCodeResponse:
@@ -297,6 +298,7 @@ def issue_auth_code(
         code_challenge=code_challenge,
         expires_at=int(time.time()) + settings.public_auth_code_ttl_seconds,
     )
+    auth_store.record_auth_activity(user_id=user.id, method=auth_method)
     return AuthCodeResponse(authorization_code=code, redirect_url=redirect_url)
 
 
@@ -525,6 +527,7 @@ def verify_register(
         auth_store=auth_store,
         settings=settings,
         user=user,
+        auth_method="password",
         redirect_url=pending_registration.redirect_url,
         code_challenge=pending_registration.code_challenge,
     )
@@ -557,6 +560,7 @@ def password_login(
         auth_store=auth_store,
         settings=settings,
         user=user,
+        auth_method="password",
         redirect_url=payload.redirect_url,
         code_challenge=payload.code_challenge,
     )
@@ -620,6 +624,7 @@ def verify_otp(
         auth_store=auth_store,
         settings=settings,
         user=user,
+        auth_method="otp",
         redirect_url=payload.redirect_url,
         code_challenge=payload.code_challenge,
     )
@@ -684,6 +689,7 @@ def consume_magic_link(
         auth_store=auth_store,
         settings=settings,
         user=user,
+        auth_method="magic_link",
         redirect_url=magic_link.redirect_url,
         code_challenge=magic_link.code_challenge,
     )
@@ -821,6 +827,7 @@ def complete_google_oauth(
         auth_store=auth_store,
         settings=settings,
         user=user,
+        auth_method="google",
         redirect_url=oauth_state.redirect_url,
         code_challenge=oauth_state.code_challenge,
     )

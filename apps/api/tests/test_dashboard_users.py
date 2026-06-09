@@ -115,6 +115,45 @@ async def test_dashboard_users_list_search_and_update_metadata() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dashboard_users_show_auth_activity_after_login() -> None:
+    auth_store, app = create_users_app()
+    user = auth_store.create_user(
+        email="activity@example.com",
+        name="Activity User",
+        password="correct-horse-battery-staple",
+    )
+    verifier = "correct horse battery staple public verifier"
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await login_owner(client)
+        login_response = await client.post(
+            "/api/v1/auth/password/login",
+            json={
+                "email": "activity@example.com",
+                "password": "correct-horse-battery-staple",
+                "redirect_url": "https://app.example.com/auth/callback",
+                "code_challenge": pkce_challenge(verifier),
+            },
+        )
+        detail_response = await client.get(
+            "/api/v1/dashboard/users",
+            headers={"Authorization": f"Bearer {token}"},
+            params={"query": "activity@example.com"},
+        )
+
+    assert login_response.status_code == 200
+    assert detail_response.status_code == 200
+    dashboard_user = detail_response.json()["users"][0]
+    assert dashboard_user["id"] == user.id
+    assert dashboard_user["created_at"]
+    assert dashboard_user["first_auth_method"] == "password"
+    assert dashboard_user["last_auth_method"] == "password"
+    assert dashboard_user["last_login_at"]
+    assert dashboard_user["login_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_dashboard_users_deactivate_blocks_password_login() -> None:
     auth_store, app = create_users_app()
     user = auth_store.create_user(

@@ -1,5 +1,5 @@
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from threading import Lock
 from typing import Any, Protocol
@@ -16,6 +16,7 @@ class AuthUserAlreadyExistsError(Exception):
 class AuthUser:
     id: str
     email: str
+    created_at: datetime
     name: str = ""
     password_hash: str | None = None
     role: str = "user"
@@ -23,6 +24,10 @@ class AuthUser:
     email_verified: bool = True
     is_blocked: bool = False
     blocked_message: str = ""
+    first_auth_method: str = ""
+    last_login_at: datetime | None = None
+    last_auth_method: str = ""
+    login_count: int = 0
     user_metadata: dict[str, Any] | None = None
 
 
@@ -88,6 +93,8 @@ class AuthStore(Protocol):
         limit: int = 100,
         offset: int = 0,
     ) -> tuple[list[AuthUser], int]: ...
+
+    def record_auth_activity(self, *, user_id: str, method: str) -> AuthUser | None: ...
 
     def update_user_password(self, *, email: str, password: str) -> None: ...
 
@@ -189,6 +196,25 @@ def normalize_user_metadata(value: dict[str, Any] | None) -> dict[str, Any]:
     return dict(value)
 
 
+AUTH_USER_COLUMNS = """
+    id::text,
+    email,
+    name,
+    password_hash,
+    role,
+    is_active,
+    email_verified,
+    is_blocked,
+    blocked_message,
+    user_metadata,
+    created_at,
+    first_auth_method,
+    last_login_at,
+    last_auth_method,
+    login_count
+"""
+
+
 class InMemoryAuthStore:
     def __init__(self) -> None:
         self.users_by_id: dict[str, AuthUser] = {}
@@ -217,6 +243,7 @@ class InMemoryAuthStore:
         user = AuthUser(
             id=str(uuid4()),
             email=normalized_email,
+            created_at=datetime.now(UTC),
             name=name or "",
             password_hash=password_hash or (hash_password(password) if password else None),
             email_verified=email_verified,
@@ -259,17 +286,9 @@ class InMemoryAuthStore:
         if not user:
             return
 
-        updated = AuthUser(
-            id=user.id,
-            email=user.email,
-            name=user.name,
+        updated = replace(
+            user,
             password_hash=hash_password(password),
-            role=user.role,
-            is_active=user.is_active,
-            email_verified=user.email_verified,
-            is_blocked=user.is_blocked,
-            blocked_message=user.blocked_message,
-            user_metadata=normalize_user_metadata(user.user_metadata),
         )
         self.users_by_id[user.id] = updated
         self.users_by_email[user.email] = updated
@@ -285,16 +304,10 @@ class InMemoryAuthStore:
         if not user:
             return None
 
-        updated = AuthUser(
-            id=user.id,
-            email=user.email,
+        updated = replace(
+            user,
             name=name if name is not None else user.name,
-            password_hash=user.password_hash,
-            role=user.role,
-            is_active=user.is_active,
             email_verified=email_verified if email_verified is not None else user.email_verified,
-            is_blocked=user.is_blocked,
-            blocked_message=user.blocked_message,
             user_metadata=normalize_user_metadata(user.user_metadata),
         )
         self.users_by_id[user.id] = updated
@@ -323,11 +336,10 @@ class InMemoryAuthStore:
         if existing and existing.id != user.id:
             raise AuthUserAlreadyExistsError
 
-        updated = AuthUser(
-            id=user.id,
+        updated = replace(
+            user,
             email=normalized_email,
             name=name if name is not None else user.name,
-            password_hash=user.password_hash,
             role=role if role is not None else user.role,
             is_active=is_active if is_active is not None else user.is_active,
             email_verified=email_verified if email_verified is not None else user.email_verified,
@@ -343,6 +355,23 @@ class InMemoryAuthStore:
         )
         if updated.email != user.email:
             del self.users_by_email[user.email]
+        self.users_by_id[user.id] = updated
+        self.users_by_email[updated.email] = updated
+        return updated
+
+    def record_auth_activity(self, *, user_id: str, method: str) -> AuthUser | None:
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+
+        normalized_method = method.strip().lower()
+        updated = replace(
+            user,
+            first_auth_method=user.first_auth_method or normalized_method,
+            last_login_at=datetime.now(UTC),
+            last_auth_method=normalized_method,
+            login_count=user.login_count + 1,
+        )
         self.users_by_id[user.id] = updated
         self.users_by_email[updated.email] = updated
         return updated
@@ -504,6 +533,7 @@ class PostgresAuthStore:
         user = AuthUser(
             id=str(uuid4()),
             email=email.strip().lower(),
+            created_at=datetime.now(UTC),
             name=name or "",
             password_hash=password_hash or (hash_password(password) if password else None),
             email_verified=email_verified,
@@ -550,18 +580,8 @@ class PostgresAuthStore:
         self._ensure_schema()
         with self._connect() as conn:
             row = conn.execute(
-                """
-                SELECT
-                    id::text,
-                    email,
-                    name,
-                    password_hash,
-                    role,
-                    is_active,
-                    email_verified,
-                    is_blocked,
-                    blocked_message,
-                    user_metadata
+                f"""
+                SELECT {AUTH_USER_COLUMNS}
                 FROM auth_users
                 WHERE email = %s
                 LIMIT 1
@@ -574,18 +594,8 @@ class PostgresAuthStore:
         self._ensure_schema()
         with self._connect() as conn:
             row = conn.execute(
-                """
-                SELECT
-                    id::text,
-                    email,
-                    name,
-                    password_hash,
-                    role,
-                    is_active,
-                    email_verified,
-                    is_blocked,
-                    blocked_message,
-                    user_metadata
+                f"""
+                SELECT {AUTH_USER_COLUMNS}
                 FROM auth_users
                 WHERE id = %s
                 LIMIT 1
@@ -607,18 +617,8 @@ class PostgresAuthStore:
         with self._connect() as conn:
             if normalized_query:
                 rows = conn.execute(
-                    """
-                    SELECT
-                        id::text,
-                        email,
-                        name,
-                        password_hash,
-                        role,
-                        is_active,
-                        email_verified,
-                        is_blocked,
-                        blocked_message,
-                        user_metadata
+                    f"""
+                    SELECT {AUTH_USER_COLUMNS}
                     FROM auth_users
                     WHERE email ILIKE %s
                        OR name ILIKE %s
@@ -642,18 +642,8 @@ class PostgresAuthStore:
                 ).fetchone()
             else:
                 rows = conn.execute(
-                    """
-                    SELECT
-                        id::text,
-                        email,
-                        name,
-                        password_hash,
-                        role,
-                        is_active,
-                        email_verified,
-                        is_blocked,
-                        blocked_message,
-                        user_metadata
+                    f"""
+                    SELECT {AUTH_USER_COLUMNS}
                     FROM auth_users
                     ORDER BY created_at DESC, email ASC
                     LIMIT %s OFFSET %s
@@ -663,6 +653,32 @@ class PostgresAuthStore:
                 total_row = conn.execute("SELECT count(*) FROM auth_users").fetchone()
 
         return [user for row in rows if (user := _auth_user_from_row(row))], int(total_row[0])
+
+    def record_auth_activity(self, *, user_id: str, method: str) -> AuthUser | None:
+        self._ensure_schema()
+        normalized_method = method.strip().lower()
+        if not normalized_method:
+            return self.get_user_by_id(user_id)
+
+        with self._connect() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    f"""
+                    UPDATE auth_users
+                    SET first_auth_method = CASE
+                            WHEN first_auth_method = '' THEN %s
+                            ELSE first_auth_method
+                        END,
+                        last_login_at = now(),
+                        last_auth_method = %s,
+                        login_count = login_count + 1
+                    WHERE id = %s
+                    RETURNING {AUTH_USER_COLUMNS}
+                    """,
+                    (normalized_method, normalized_method, user_id),
+                ).fetchone()
+
+        return _auth_user_from_row(row)
 
     def update_user_password(self, *, email: str, password: str) -> None:
         self._ensure_schema()
@@ -688,22 +704,12 @@ class PostgresAuthStore:
         with self._connect() as conn:
             with conn.transaction():
                 row = conn.execute(
-                    """
+                    f"""
                     UPDATE auth_users
                     SET name = COALESCE(%s, name),
                         email_verified = COALESCE(%s, email_verified)
                     WHERE email = %s
-                    RETURNING
-                        id::text,
-                        email,
-                        name,
-                        password_hash,
-                        role,
-                        is_active,
-                        email_verified,
-                        is_blocked,
-                        blocked_message,
-                        user_metadata
+                    RETURNING {AUTH_USER_COLUMNS}
                     """,
                     (name, email_verified, email.strip().lower()),
                 ).fetchone()
@@ -730,7 +736,7 @@ class PostgresAuthStore:
                     from psycopg.types.json import Jsonb
 
                     row = conn.execute(
-                        """
+                        f"""
                         UPDATE auth_users
                         SET email = COALESCE(%s, email),
                             name = COALESCE(%s, name),
@@ -741,17 +747,7 @@ class PostgresAuthStore:
                             blocked_message = COALESCE(%s, blocked_message),
                             user_metadata = COALESCE(%s, user_metadata)
                         WHERE id = %s
-                        RETURNING
-                            id::text,
-                            email,
-                            name,
-                            password_hash,
-                            role,
-                            is_active,
-                            email_verified,
-                            is_blocked,
-                            blocked_message,
-                            user_metadata
+                        RETURNING {AUTH_USER_COLUMNS}
                         """,
                         (
                             email.strip().lower() if email is not None else None,
@@ -1138,6 +1134,10 @@ class PostgresAuthStore:
                             is_blocked BOOLEAN NOT NULL DEFAULT false,
                             blocked_message TEXT NOT NULL DEFAULT '',
                             user_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+                            first_auth_method TEXT NOT NULL DEFAULT '',
+                            last_login_at TIMESTAMPTZ,
+                            last_auth_method TEXT NOT NULL DEFAULT '',
+                            login_count INTEGER NOT NULL DEFAULT 0,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
                         """
@@ -1170,6 +1170,30 @@ class PostgresAuthStore:
                         """
                         ALTER TABLE auth_users
                         ADD COLUMN IF NOT EXISTS blocked_message TEXT NOT NULL DEFAULT ''
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS first_auth_method TEXT NOT NULL DEFAULT ''
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS last_auth_method TEXT NOT NULL DEFAULT ''
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS login_count INTEGER NOT NULL DEFAULT 0
                         """
                     )
                     conn.execute(
@@ -1264,6 +1288,8 @@ def _auth_user_from_row(row) -> AuthUser | None:
     if not row:
         return None
     has_block_columns = len(row) > 9
+    has_activity_columns = len(row) > 14
+    metadata_index = 9 if has_block_columns else 7
     return AuthUser(
         id=row[0],
         email=row[1],
@@ -1275,8 +1301,13 @@ def _auth_user_from_row(row) -> AuthUser | None:
         is_blocked=bool(row[7]) if has_block_columns else False,
         blocked_message=str(row[8] or "") if has_block_columns else "",
         user_metadata=normalize_user_metadata(
-            row[9] if has_block_columns else row[7] if len(row) > 7 else None,
+            row[metadata_index] if len(row) > metadata_index else None,
         ),
+        created_at=row[10] if has_activity_columns else datetime.now(UTC),
+        first_auth_method=str(row[11] or "") if has_activity_columns else "",
+        last_login_at=row[12] if has_activity_columns else None,
+        last_auth_method=str(row[13] or "") if has_activity_columns else "",
+        login_count=int(row[14] or 0) if has_activity_columns else 0,
     )
 
 

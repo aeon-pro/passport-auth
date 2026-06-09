@@ -508,6 +508,32 @@ function stringifyMetadata(value) {
   return JSON.stringify(value || {}, null, 2);
 }
 
+function formatUserDate(value) {
+  if (!value) {
+    return "Not recorded";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Not recorded";
+  }
+
+  return date.toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+function formatAuthMethod(value) {
+  const labels = {
+    google: "Google OAuth",
+    magic_link: "Magic link",
+    otp: "OTP",
+    password: "Password",
+  };
+  return labels[value] || value || "Not recorded";
+}
+
 function parseMetadata(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -1901,6 +1927,28 @@ function renderUserDetail(user) {
       <div class="panel-heading">
         <span class="eyebrow">User details</span>
         <h3>${escapeHtml(user.name || user.email)}</h3>
+      </div>
+      <div class="user-activity-grid" aria-label="User activity">
+        <div>
+          <span>Created</span>
+          <strong>${escapeHtml(formatUserDate(user.created_at))}</strong>
+        </div>
+        <div>
+          <span>First method</span>
+          <strong>${escapeHtml(formatAuthMethod(user.first_auth_method))}</strong>
+        </div>
+        <div>
+          <span>Last login</span>
+          <strong>${escapeHtml(formatUserDate(user.last_login_at))}</strong>
+        </div>
+        <div>
+          <span>Last method</span>
+          <strong>${escapeHtml(formatAuthMethod(user.last_auth_method))}</strong>
+        </div>
+        <div>
+          <span>Login count</span>
+          <strong>${escapeHtml(String(user.login_count || 0))}</strong>
+        </div>
       </div>
       <div class="form-grid two-columns">
         <label class="field">

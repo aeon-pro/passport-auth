@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -18,12 +19,17 @@ MAX_BLOCKED_MESSAGE_LENGTH = 500
 class DashboardUserResponse(BaseModel):
     id: str
     email: str
+    created_at: datetime
     name: str
     role: str
     is_active: bool
     email_verified: bool
     is_blocked: bool
     blocked_message: str
+    first_auth_method: str
+    last_login_at: datetime | None
+    last_auth_method: str
+    login_count: int
     user_metadata: dict[str, Any]
 
 
@@ -85,12 +91,17 @@ def build_user_response(user: AuthUser) -> DashboardUserResponse:
     return DashboardUserResponse(
         id=user.id,
         email=user.email,
+        created_at=user.created_at,
         name=user.name,
         role=user.role,
         is_active=user.is_active,
         email_verified=user.email_verified,
         is_blocked=user.is_blocked,
         blocked_message=user.blocked_message,
+        first_auth_method=user.first_auth_method,
+        last_login_at=user.last_login_at,
+        last_auth_method=user.last_auth_method,
+        login_count=user.login_count,
         user_metadata=user.user_metadata or {},
     )
 

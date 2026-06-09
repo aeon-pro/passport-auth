@@ -210,6 +210,11 @@ def test_dashboard_contains_users_management_page() -> None:
     assert "Metadata JSON" in app_js
     assert "Blocked message" in app_js
     assert "toggle-user-blocked" in app_js
+    assert "Created" in app_js
+    assert "First method" in app_js
+    assert "Last login" in app_js
+    assert "Login count" in app_js
+    assert "formatUserDate" in app_js
     assert "Deactivate" in app_js
     assert "users-workspace" in styles_css
     assert "user-detail-panel" in styles_css
