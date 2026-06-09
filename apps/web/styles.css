@@ -469,6 +469,7 @@ p {
 
 .auth-card,
 .panel,
+.overview-card,
 .metric,
 .form-panel,
 .settings-section,
@@ -488,6 +489,7 @@ p {
 
 .auth-card,
 .panel,
+.overview-card,
 .form-panel,
 .settings-section,
 .step-rail,
@@ -509,6 +511,57 @@ p {
 .readiness-card {
   align-content: space-between;
   min-height: 270px;
+}
+
+.control-overview {
+  align-content: space-between;
+  min-height: 220px;
+}
+
+.control-overview p {
+  color: var(--ink-muted);
+  font-size: 14px;
+}
+
+.dashboard-events {
+  margin-top: 22px;
+}
+
+.event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.event-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 18px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 14px 16px;
+}
+
+.event-row div {
+  display: grid;
+  gap: 5px;
+}
+
+.event-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 520;
+}
+
+.event-row small {
+  color: var(--ink-muted);
+}
+
+.event-row > span {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 560;
 }
 
 .setup-list {
@@ -925,6 +978,11 @@ p {
   color: var(--warning);
 }
 
+.status-chip.blocked {
+  border-color: rgba(255, 111, 111, 0.3);
+  color: #ff9b9b;
+}
+
 .user-editor {
   display: grid;
   gap: 18px;
@@ -946,8 +1004,13 @@ p {
 
 .user-editor-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 12px;
+}
+
+.danger-action {
+  color: #ffb4b4;
 }
 
 .settings-intro {

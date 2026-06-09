@@ -149,6 +149,42 @@ async def test_dashboard_users_deactivate_blocks_password_login() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dashboard_users_block_with_support_message_blocks_password_login() -> None:
+    auth_store, app = create_users_app()
+    user = auth_store.create_user(
+        email="blocked@example.com",
+        name="Blocked User",
+        password="correct-horse-battery-staple",
+    )
+    verifier = "correct horse battery staple public verifier"
+    block_message = "Your account is blocked. Contact support for billing review."
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await login_owner(client)
+        block_response = await client.patch(
+            f"/api/v1/dashboard/users/{user.id}",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"is_blocked": True, "blocked_message": block_message},
+        )
+        login_response = await client.post(
+            "/api/v1/auth/password/login",
+            json={
+                "email": "blocked@example.com",
+                "password": "correct-horse-battery-staple",
+                "redirect_url": "https://app.example.com/auth/callback",
+                "code_challenge": pkce_challenge(verifier),
+            },
+        )
+
+    assert block_response.status_code == 200
+    assert block_response.json()["is_blocked"] is True
+    assert block_response.json()["blocked_message"] == block_message
+    assert login_response.status_code == 403
+    assert login_response.json() == {"detail": block_message}
+
+
+@pytest.mark.asyncio
 async def test_public_me_returns_custom_user_metadata() -> None:
     auth_store, app = create_users_app()
     auth_store.create_user(

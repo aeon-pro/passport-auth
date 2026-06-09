@@ -24,6 +24,7 @@ from passport_auth.setup.passwords import verify_password
 from passport_auth.setup.store import DashboardSettings, SetupStore
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+DEFAULT_BLOCKED_MESSAGE = "This account is blocked. Contact support for more help."
 
 
 class AuthCodeRequest(BaseModel):
@@ -351,6 +352,11 @@ def get_or_create_public_user(
 
 
 def require_active_user(user: AuthUser) -> None:
+    if user.is_blocked:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=user.blocked_message or DEFAULT_BLOCKED_MESSAGE,
+        )
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

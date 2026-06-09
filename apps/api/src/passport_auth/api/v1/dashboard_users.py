@@ -12,6 +12,7 @@ router = APIRouter(prefix="/dashboard/users", tags=["dashboard-users"])
 
 ALLOWED_USER_ROLES = {"owner", "admin", "user"}
 MAX_METADATA_BYTES = 16_384
+MAX_BLOCKED_MESSAGE_LENGTH = 500
 
 
 class DashboardUserResponse(BaseModel):
@@ -21,6 +22,8 @@ class DashboardUserResponse(BaseModel):
     role: str
     is_active: bool
     email_verified: bool
+    is_blocked: bool
+    blocked_message: str
     user_metadata: dict[str, Any]
 
 
@@ -35,9 +38,11 @@ class DashboardUserUpdate(BaseModel):
     role: str | None = Field(default=None, max_length=32)
     is_active: bool | None = None
     email_verified: bool | None = None
+    is_blocked: bool | None = None
+    blocked_message: str | None = Field(default=None, max_length=MAX_BLOCKED_MESSAGE_LENGTH)
     user_metadata: dict[str, Any] | None = None
 
-    @field_validator("email", "name", "role")
+    @field_validator("email", "name", "role", "blocked_message")
     @classmethod
     def strip_optional_string(cls, value: str | None) -> str | None:
         if value is None:
@@ -84,6 +89,8 @@ def build_user_response(user: AuthUser) -> DashboardUserResponse:
         role=user.role,
         is_active=user.is_active,
         email_verified=user.email_verified,
+        is_blocked=user.is_blocked,
+        blocked_message=user.blocked_message,
         user_metadata=user.user_metadata or {},
     )
 

@@ -21,6 +21,8 @@ class AuthUser:
     role: str = "user"
     is_active: bool = True
     email_verified: bool = True
+    is_blocked: bool = False
+    blocked_message: str = ""
     user_metadata: dict[str, Any] | None = None
 
 
@@ -106,6 +108,8 @@ class AuthStore(Protocol):
         role: str | None = None,
         is_active: bool | None = None,
         email_verified: bool | None = None,
+        is_blocked: bool | None = None,
+        blocked_message: str | None = None,
         user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser | None: ...
 
@@ -244,6 +248,7 @@ class InMemoryAuthStore:
                 if normalized_query in user.email.lower()
                 or normalized_query in user.name.lower()
                 or normalized_query in user.role.lower()
+                or normalized_query in user.blocked_message.lower()
             ]
 
         users.sort(key=lambda user: user.email)
@@ -262,6 +267,8 @@ class InMemoryAuthStore:
             role=user.role,
             is_active=user.is_active,
             email_verified=user.email_verified,
+            is_blocked=user.is_blocked,
+            blocked_message=user.blocked_message,
             user_metadata=normalize_user_metadata(user.user_metadata),
         )
         self.users_by_id[user.id] = updated
@@ -286,6 +293,8 @@ class InMemoryAuthStore:
             role=user.role,
             is_active=user.is_active,
             email_verified=email_verified if email_verified is not None else user.email_verified,
+            is_blocked=user.is_blocked,
+            blocked_message=user.blocked_message,
             user_metadata=normalize_user_metadata(user.user_metadata),
         )
         self.users_by_id[user.id] = updated
@@ -301,6 +310,8 @@ class InMemoryAuthStore:
         role: str | None = None,
         is_active: bool | None = None,
         email_verified: bool | None = None,
+        is_blocked: bool | None = None,
+        blocked_message: str | None = None,
         user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser | None:
         user = self.get_user_by_id(user_id)
@@ -320,6 +331,10 @@ class InMemoryAuthStore:
             role=role if role is not None else user.role,
             is_active=is_active if is_active is not None else user.is_active,
             email_verified=email_verified if email_verified is not None else user.email_verified,
+            is_blocked=is_blocked if is_blocked is not None else user.is_blocked,
+            blocked_message=(
+                blocked_message if blocked_message is not None else user.blocked_message
+            ),
             user_metadata=(
                 normalize_user_metadata(user_metadata)
                 if user_metadata is not None
@@ -510,9 +525,11 @@ class PostgresAuthStore:
                                 role,
                                 is_active,
                                 email_verified,
+                                is_blocked,
+                                blocked_message,
                                 user_metadata
                             )
-                        VALUES (%s, %s, %s, %s, 'user', true, %s, %s)
+                        VALUES (%s, %s, %s, %s, 'user', true, %s, false, '', %s)
                         """,
                         (
                             user.id,
@@ -542,6 +559,8 @@ class PostgresAuthStore:
                     role,
                     is_active,
                     email_verified,
+                    is_blocked,
+                    blocked_message,
                     user_metadata
                 FROM auth_users
                 WHERE email = %s
@@ -564,6 +583,8 @@ class PostgresAuthStore:
                     role,
                     is_active,
                     email_verified,
+                    is_blocked,
+                    blocked_message,
                     user_metadata
                 FROM auth_users
                 WHERE id = %s
@@ -595,21 +616,29 @@ class PostgresAuthStore:
                         role,
                         is_active,
                         email_verified,
+                        is_blocked,
+                        blocked_message,
                         user_metadata
                     FROM auth_users
-                    WHERE email ILIKE %s OR name ILIKE %s OR role ILIKE %s
+                    WHERE email ILIKE %s
+                       OR name ILIKE %s
+                       OR role ILIKE %s
+                       OR blocked_message ILIKE %s
                     ORDER BY created_at DESC, email ASC
                     LIMIT %s OFFSET %s
                     """,
-                    (pattern, pattern, pattern, limit, offset),
+                    (pattern, pattern, pattern, pattern, limit, offset),
                 ).fetchall()
                 total_row = conn.execute(
                     """
                     SELECT count(*)
                     FROM auth_users
-                    WHERE email ILIKE %s OR name ILIKE %s OR role ILIKE %s
+                    WHERE email ILIKE %s
+                       OR name ILIKE %s
+                       OR role ILIKE %s
+                       OR blocked_message ILIKE %s
                     """,
-                    (pattern, pattern, pattern),
+                    (pattern, pattern, pattern, pattern),
                 ).fetchone()
             else:
                 rows = conn.execute(
@@ -622,6 +651,8 @@ class PostgresAuthStore:
                         role,
                         is_active,
                         email_verified,
+                        is_blocked,
+                        blocked_message,
                         user_metadata
                     FROM auth_users
                     ORDER BY created_at DESC, email ASC
@@ -670,6 +701,8 @@ class PostgresAuthStore:
                         role,
                         is_active,
                         email_verified,
+                        is_blocked,
+                        blocked_message,
                         user_metadata
                     """,
                     (name, email_verified, email.strip().lower()),
@@ -686,6 +719,8 @@ class PostgresAuthStore:
         role: str | None = None,
         is_active: bool | None = None,
         email_verified: bool | None = None,
+        is_blocked: bool | None = None,
+        blocked_message: str | None = None,
         user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser | None:
         self._ensure_schema()
@@ -702,6 +737,8 @@ class PostgresAuthStore:
                             role = COALESCE(%s, role),
                             is_active = COALESCE(%s, is_active),
                             email_verified = COALESCE(%s, email_verified),
+                            is_blocked = COALESCE(%s, is_blocked),
+                            blocked_message = COALESCE(%s, blocked_message),
                             user_metadata = COALESCE(%s, user_metadata)
                         WHERE id = %s
                         RETURNING
@@ -712,6 +749,8 @@ class PostgresAuthStore:
                             role,
                             is_active,
                             email_verified,
+                            is_blocked,
+                            blocked_message,
                             user_metadata
                         """,
                         (
@@ -720,6 +759,8 @@ class PostgresAuthStore:
                             role,
                             is_active,
                             email_verified,
+                            is_blocked,
+                            blocked_message,
                             Jsonb(user_metadata) if user_metadata is not None else None,
                             user_id,
                         ),
@@ -1094,6 +1135,8 @@ class PostgresAuthStore:
                             role TEXT NOT NULL DEFAULT 'user',
                             is_active BOOLEAN NOT NULL DEFAULT true,
                             email_verified BOOLEAN NOT NULL DEFAULT true,
+                            is_blocked BOOLEAN NOT NULL DEFAULT false,
+                            blocked_message TEXT NOT NULL DEFAULT '',
                             user_metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
@@ -1115,6 +1158,18 @@ class PostgresAuthStore:
                         """
                         ALTER TABLE auth_users
                         ADD COLUMN IF NOT EXISTS user_metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT false
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS blocked_message TEXT NOT NULL DEFAULT ''
                         """
                     )
                     conn.execute(
@@ -1208,6 +1263,7 @@ class PostgresAuthStore:
 def _auth_user_from_row(row) -> AuthUser | None:
     if not row:
         return None
+    has_block_columns = len(row) > 9
     return AuthUser(
         id=row[0],
         email=row[1],
@@ -1216,7 +1272,11 @@ def _auth_user_from_row(row) -> AuthUser | None:
         role=row[4],
         is_active=bool(row[5]),
         email_verified=bool(row[6]),
-        user_metadata=normalize_user_metadata(row[7] if len(row) > 7 else None),
+        is_blocked=bool(row[7]) if has_block_columns else False,
+        blocked_message=str(row[8] or "") if has_block_columns else "",
+        user_metadata=normalize_user_metadata(
+            row[9] if has_block_columns else row[7] if len(row) > 7 else None,
+        ),
     )
 
 

@@ -208,9 +208,26 @@ def test_dashboard_contains_users_management_page() -> None:
     assert "handleUserUpdate" in app_js
     assert "user_metadata" in app_js
     assert "Metadata JSON" in app_js
+    assert "Blocked message" in app_js
+    assert "toggle-user-blocked" in app_js
     assert "Deactivate" in app_js
     assert "users-workspace" in styles_css
     assert "user-detail-panel" in styles_css
+
+
+def test_dashboard_uses_operational_overview_after_setup() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "renderDashboardEvents" in app_js
+    assert "Important events" in app_js
+    assert "Email delivery" in app_js
+    assert "Blocked users" in app_js
+    assert "Setup state" not in app_js
+    assert "Owner configured" not in app_js
+    assert "setup-list" not in app_js
+    assert "dashboard-events" in styles_css
+    assert "overview-card" in styles_css
 
 
 def test_static_app_contains_public_hosted_auth_pages() -> None:

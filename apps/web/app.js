@@ -1,6 +1,7 @@
 const TOKEN_KEY = "passport-auth-token";
 const app = document.querySelector("#app");
 const defaultTemplateColor = "#f5f5f7";
+const defaultBlockedMessage = "This account is blocked. Contact support for more help.";
 const templateColorPresets = [
   defaultTemplateColor,
   "#7cffaa",
@@ -1639,35 +1640,99 @@ function renderHostedAuthContent(path, context) {
 }
 
 function dashboardMetrics() {
-  if (!state.settings) {
-    return metrics;
-  }
-
-  const enabledMethods = Object.keys(authMethodLabels).filter((key) => state.settings[key]);
+  const settings = state.settings || {};
+  const enabledMethods = Object.keys(authMethodLabels).filter((key) => settings[key]);
   const domainCount = [
-    state.settings.app_domain,
-    state.settings.auth_domain,
-    ...(state.settings.allowed_origins || []),
-    ...(state.settings.redirect_urls || []),
+    settings.app_domain,
+    settings.auth_domain,
+    ...(settings.allowed_origins || []),
+    ...(settings.redirect_urls || []),
   ].filter(Boolean).length;
+  const blockedUsers = state.users.filter((user) => user.is_blocked).length;
 
   return [
     { label: "Domains", value: String(domainCount), detail: "Origins and redirects" },
-    { label: "Providers", value: String(enabledMethods.length), detail: "Enabled methods" },
-    { label: "API keys", value: "0", detail: "Service access" },
-    { label: "Events", value: "0", detail: "Last 24 hours" },
+    { label: "Users", value: String(state.usersTotal || state.users.length), detail: "Public accounts" },
+    { label: "Blocked users", value: String(blockedUsers), detail: "Support review" },
+    { label: "Methods", value: String(enabledMethods.length), detail: "Enabled auth" },
   ];
 }
 
-function renderDashboard() {
-  const readySettings = state.settings || {};
-  const setupItems = [
-    { label: "Owner account", complete: setupComplete() },
-    { label: "Auth domain", complete: Boolean(readySettings.auth_domain) },
-    { label: "Redirect URLs", complete: Boolean(readySettings.redirect_urls?.length) },
-    { label: "Email provider", complete: Boolean(readySettings.resend_configured) },
+function renderDashboardEvents(settings = {}, users = []) {
+  const blockedUsers = users.filter((user) => user.is_blocked).length;
+  const redirectCount = (settings.redirect_urls || []).length;
+  const enabledMethods = Object.keys(authMethodLabels)
+    .filter((key) => settings[key])
+    .map((key) => authMethodLabels[key]);
+  const events = [
+    {
+      title: "Email delivery",
+      value: settings.resend_configured ? "Configured" : "Not configured",
+      detail: settings.resend_configured
+        ? "Resend can deliver OTP, magic link, and reset templates."
+        : "OTP, magic link, and reset emails need Resend before production use.",
+    },
+    {
+      title: "Blocked users",
+      value: `${blockedUsers}`,
+      detail: blockedUsers
+        ? "Blocked accounts cannot sign in, refresh, or access /me."
+        : "No customer accounts are blocked right now.",
+    },
+    {
+      title: "Redirect policy",
+      value: `${redirectCount} allowed`,
+      detail: redirectCount
+        ? "Hosted auth requests must use one of the configured callback URLs."
+        : "Add redirect URLs before accepting production sign-ins.",
+    },
+    {
+      title: "Enabled methods",
+      value: enabledMethods.length ? enabledMethods.join(", ") : "None",
+      detail: enabledMethods.length
+        ? "Hosted pages expose only the methods enabled here."
+        : "Enable at least one sign-in method from Settings.",
+    },
   ];
+
+  return `
+    <section class="overview-card dashboard-events" aria-label="Important events">
+      <div class="panel-heading">
+        <span class="eyebrow">Important events</span>
+        <h3>Operations</h3>
+      </div>
+      <div class="event-list">
+        ${events
+          .map(
+            (event) => `
+              <article class="event-row">
+                <div>
+                  <strong>${escapeHtml(event.title)}</strong>
+                  <small>${escapeHtml(event.detail)}</small>
+                </div>
+                <span>${escapeHtml(event.value)}</span>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderDashboard() {
+  if (state.token && !state.usersLoaded && !state.usersLoading) {
+    void loadUsers({ quiet: true }).then(() => {
+      if (currentPath() === "/") {
+        render();
+      }
+    });
+  }
+
+  const settings = state.settings || {};
   const visibleMetrics = dashboardMetrics();
+  const brandName = currentBrandName();
+  const authSurface = ensureOrigin(settings.auth_domain || settings.app_domain) || "No auth domain";
 
   renderAppShell(`
     <div class="hero dashboard-command">
@@ -1676,15 +1741,13 @@ function renderDashboard() {
         <h2>Auth control plane</h2>
         <p>Hosted pages, public APIs, dashboard controls, and service keys behind one web service.</p>
       </div>
-      <div class="panel readiness-card">
+      <div class="overview-card control-overview">
         <div class="panel-heading">
-          <span class="eyebrow">Setup state</span>
-          <h3>Owner configured</h3>
+          <span class="eyebrow">Control surface</span>
+          <h3>${escapeHtml(brandName)}</h3>
         </div>
-        <ul class="setup-list" aria-label="Setup checklist">
-          ${setupItems.map((item) => `<li class="${item.complete ? "complete" : ""}">${item.label}</li>`).join("")}
-        </ul>
-        <a class="primary-action" href="/settings" data-link>Edit settings</a>
+        <p>${escapeHtml(authSurface)}</p>
+        <a class="secondary-action" href="/settings" data-link>Edit settings</a>
       </div>
     </div>
     <div class="metric-grid signal-grid" aria-label="Auth readiness">
@@ -1700,6 +1763,7 @@ function renderDashboard() {
         )
         .join("")}
     </div>
+    ${renderDashboardEvents(settings, state.users)}
   `);
 }
 
@@ -1778,8 +1842,9 @@ function renderUserRows() {
   }
 
   return state.users
-    .map(
-      (user) => `
+    .map((user) => {
+      const status = userStatus(user);
+      return `
         <button
           class="user-row ${user.id === state.selectedUserId ? "active" : ""}"
           type="button"
@@ -1791,13 +1856,23 @@ function renderUserRows() {
             <strong>${escapeHtml(user.name || "Unnamed user")}</strong>
             <small>${escapeHtml(user.email)}</small>
           </span>
-          <span class="status-chip ${user.is_active ? "active" : "inactive"}">
-            ${user.is_active ? "Active" : "Inactive"}
+          <span class="status-chip ${status.className}">
+            ${status.label}
           </span>
         </button>
-      `,
-    )
+      `;
+    })
     .join("");
+}
+
+function userStatus(user) {
+  if (user.is_blocked) {
+    return { className: "blocked", label: "Blocked" };
+  }
+  if (!user.is_active) {
+    return { className: "inactive", label: "Inactive" };
+  }
+  return { className: "active", label: "Active" };
 }
 
 function renderEmptyUserDetail() {
@@ -1849,7 +1924,18 @@ function renderUserDetail(user) {
             <span class="toggle-control" aria-hidden="true"></span>
             <span>Email verified</span>
           </label>
+          <label class="toggle-row compact">
+            <input name="is_blocked" type="checkbox" ${user.is_blocked ? "checked" : ""} />
+            <span class="toggle-control" aria-hidden="true"></span>
+            <span>Blocked</span>
+          </label>
         </div>
+        <label class="field full-span">
+          <span>Blocked message</span>
+          <textarea name="blocked_message" rows="3" placeholder="${escapeHtml(defaultBlockedMessage)}">${escapeHtml(
+            user.blocked_message || "",
+          )}</textarea>
+        </label>
         <label class="field full-span">
           <span>Metadata JSON</span>
           <textarea name="user_metadata" rows="9" spellcheck="false" placeholder='{"plan":"pro"}'>${escapeHtml(
@@ -1862,6 +1948,11 @@ function renderUserDetail(user) {
           user.id,
         )}" data-next-active="${user.is_active ? "false" : "true"}" ${state.busy ? "disabled" : ""}>
           ${user.is_active ? "Deactivate" : "Reactivate"}
+        </button>
+        <button class="secondary-action danger-action" type="button" data-action="toggle-user-blocked" data-user-id="${escapeHtml(
+          user.id,
+        )}" data-next-blocked="${user.is_blocked ? "false" : "true"}" ${state.busy ? "disabled" : ""}>
+          ${user.is_blocked ? "Unblock" : "Block user"}
         </button>
         <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
           ${state.busy ? "Saving..." : "Save user"}
@@ -2832,6 +2923,8 @@ async function handleUserUpdate(form) {
       role: String(formData.get("role") || "user").trim(),
       is_active: checkboxValue(formData, "is_active"),
       email_verified: checkboxValue(formData, "email_verified"),
+      is_blocked: checkboxValue(formData, "is_blocked"),
+      blocked_message: String(formData.get("blocked_message") || "").trim(),
       user_metadata: userMetadata,
     },
     "User saved.",
@@ -3018,6 +3111,26 @@ app.addEventListener("click", (event) => {
     const isActive = actionButton.dataset.nextActive === "true";
     if (userId) {
       void updateUser(userId, { is_active: isActive }, isActive ? "User reactivated." : "User deactivated.");
+    }
+  }
+  if (action === "toggle-user-blocked") {
+    const userId = actionButton.dataset.userId || "";
+    const isBlocked = actionButton.dataset.nextBlocked === "true";
+    const form = event.target.closest("form");
+    const formData = form ? new FormData(form) : null;
+    const selected = selectedUser();
+    const blockedMessage = String(
+      formData?.get("blocked_message") || selected?.blocked_message || defaultBlockedMessage,
+    ).trim();
+    if (userId) {
+      void updateUser(
+        userId,
+        {
+          is_blocked: isBlocked,
+          blocked_message: isBlocked ? blockedMessage : "",
+        },
+        isBlocked ? "User blocked." : "User unblocked.",
+      );
     }
   }
   if (action === "hosted-google-start") {
