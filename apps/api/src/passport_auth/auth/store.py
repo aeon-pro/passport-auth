@@ -120,6 +120,8 @@ class AuthStore(Protocol):
         user_metadata: dict[str, Any] | None = None,
     ) -> AuthUser | None: ...
 
+    def delete_user(self, *, user_id: str) -> bool: ...
+
     def create_pending_registration(
         self,
         *,
@@ -358,6 +360,35 @@ class InMemoryAuthStore:
         self.users_by_id[user.id] = updated
         self.users_by_email[updated.email] = updated
         return updated
+
+    def delete_user(self, *, user_id: str) -> bool:
+        user = self.users_by_id.pop(user_id, None)
+        if not user:
+            return False
+
+        self.users_by_email.pop(user.email, None)
+        self.auth_codes = {
+            token_hash: auth_code
+            for token_hash, auth_code in self.auth_codes.items()
+            if auth_code.user_id != user_id
+        }
+        self.refresh_tokens = {
+            token_hash: refresh_token
+            for token_hash, refresh_token in self.refresh_tokens.items()
+            if refresh_token.user_id != user_id
+        }
+        self.magic_links = {
+            token_hash: magic_link
+            for token_hash, magic_link in self.magic_links.items()
+            if magic_link.email != user.email
+        }
+        self.pending_registrations.pop(user.email, None)
+        self.otps = {
+            key: otp_data
+            for key, otp_data in self.otps.items()
+            if key[0] != user.email
+        }
+        return True
 
     def record_auth_activity(self, *, user_id: str, method: str) -> AuthUser | None:
         user = self.get_user_by_id(user_id)
@@ -679,6 +710,27 @@ class PostgresAuthStore:
                 ).fetchone()
 
         return _auth_user_from_row(row)
+
+    def delete_user(self, *, user_id: str) -> bool:
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    "SELECT email FROM auth_users WHERE id = %s LIMIT 1",
+                    (user_id,),
+                ).fetchone()
+                if not row:
+                    return False
+
+                email = row[0]
+                conn.execute("DELETE FROM auth_codes WHERE user_id = %s", (user_id,))
+                conn.execute("DELETE FROM refresh_tokens WHERE user_id = %s", (user_id,))
+                conn.execute("DELETE FROM auth_otps WHERE email = %s", (email,))
+                conn.execute("DELETE FROM magic_links WHERE email = %s", (email,))
+                conn.execute("DELETE FROM pending_registrations WHERE email = %s", (email,))
+                result = conn.execute("DELETE FROM auth_users WHERE id = %s", (user_id,))
+
+        return result.rowcount > 0
 
     def update_user_password(self, *, email: str, password: str) -> None:
         self._ensure_schema()

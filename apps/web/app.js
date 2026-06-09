@@ -91,6 +91,7 @@ const state = {
   usersLoaded: false,
   usersLoading: false,
   selectedUserId: "",
+  editingUserId: "",
   settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
@@ -144,6 +145,12 @@ const authMethodLabels = {
   google_oauth_enabled: "Google OAuth",
   password_reset_otp_enabled: "Password reset OTP",
 };
+
+const userRoleOptions = [
+  { value: "user", label: "User" },
+  { value: "admin", label: "Admin" },
+  { value: "owner", label: "Owner" },
+];
 
 const onboardingSteps = [
   {
@@ -504,6 +511,10 @@ function selectedUser() {
   return state.users.find((user) => user.id === state.selectedUserId) || state.users[0] || null;
 }
 
+function editingUser() {
+  return state.users.find((user) => user.id === state.editingUserId) || null;
+}
+
 function stringifyMetadata(value) {
   return JSON.stringify(value || {}, null, 2);
 }
@@ -532,6 +543,35 @@ function formatAuthMethod(value) {
     password: "Password",
   };
   return labels[value] || value || "Not recorded";
+}
+
+function formatUserRole(value) {
+  return userRoleOptions.find((role) => role.value === value)?.label || "User";
+}
+
+function renderRoleSelect(selectedRole) {
+  const normalizedRole = userRoleOptions.some((role) => role.value === selectedRole)
+    ? selectedRole
+    : "user";
+  return `
+    <select name="role" class="role-select-field">
+      ${userRoleOptions
+        .map(
+          (role) =>
+            `<option value="${role.value}" ${role.value === normalizedRole ? "selected" : ""}>${role.label}</option>`,
+        )
+        .join("")}
+    </select>
+  `;
+}
+
+function renderPencilIcon() {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M4 20h4.3L19.7 8.6a2 2 0 0 0 0-2.8l-1.5-1.5a2 2 0 0 0-2.8 0L4 15.7V20Z"></path>
+      <path d="m14 5 5 5"></path>
+    </svg>
+  `;
 }
 
 function parseMetadata(value) {
@@ -657,6 +697,9 @@ async function loadUsers({ query = state.usersQuery, quiet = false } = {}) {
     state.usersLoaded = true;
     if (!state.users.some((user) => user.id === state.selectedUserId)) {
       state.selectedUserId = state.users[0]?.id || "";
+    }
+    if (!state.users.some((user) => user.id === state.editingUserId)) {
+      state.editingUserId = "";
     }
   } catch (error) {
     if (!quiet) {
@@ -1822,8 +1865,6 @@ function renderUsers() {
     void loadUsers();
   }
 
-  const user = selectedUser();
-
   renderAppShell(`
     <div class="users-route">
       <header class="settings-intro">
@@ -1839,31 +1880,35 @@ function renderUsers() {
         </div>
       </header>
 
-      <div class="users-workspace">
-        <section class="users-list-panel" aria-label="Application users">
-          <form class="users-search" data-form="users-search">
-            <label class="field">
-              <span>Search users</span>
-              <input name="query" type="search" value="${escapeHtml(
-                state.usersQuery,
-              )}" placeholder="Name, email, or role" />
-            </label>
-            <button class="secondary-action" type="submit" ${state.usersLoading ? "disabled" : ""}>
-              ${state.usersLoading ? "Searching..." : "Search"}
-            </button>
-          </form>
-          <div class="user-list" role="list">
-            ${renderUserRows()}
+      <section class="users-table-panel" aria-label="Application users">
+        <form class="users-search" data-form="users-search">
+          <label class="field">
+            <span>Search users</span>
+            <input name="query" type="search" value="${escapeHtml(
+              state.usersQuery,
+            )}" placeholder="Name, email, role, or blocked message" />
+          </label>
+          <button class="secondary-action" type="submit" ${state.usersLoading ? "disabled" : ""}>
+            ${state.usersLoading ? "Searching..." : "Search"}
+          </button>
+        </form>
+        <div class="users-table" role="table" aria-label="Public auth users">
+          <div class="users-table-head" role="row">
+            <span>User</span>
+            <span>Role</span>
+            <span>Status</span>
+            <span>Created</span>
+            <span>Last login</span>
+            <span>Method</span>
+            <span>Edit</span>
           </div>
-        </section>
-
-        <section class="user-detail-panel" aria-label="User details">
-          ${user ? renderUserDetail(user) : renderEmptyUserDetail()}
-        </section>
-      </div>
+          ${renderUserRows()}
+        </div>
+      </section>
 
       ${renderError()}
       ${renderMessage()}
+      ${renderUserEditDialog()}
     </div>
   `);
 }
@@ -1880,21 +1925,34 @@ function renderUserRows() {
     .map((user) => {
       const status = userStatus(user);
       return `
-        <button
-          class="user-row ${user.id === state.selectedUserId ? "active" : ""}"
-          type="button"
-          data-action="select-user"
-          data-user-id="${escapeHtml(user.id)}"
-        >
-          <span class="profile-avatar" aria-hidden="true">${escapeHtml(initialsFromUser(user))}</span>
-          <span class="user-row-main">
-            <strong>${escapeHtml(user.name || "Unnamed user")}</strong>
-            <small>${escapeHtml(user.email)}</small>
+        <div class="user-row" role="row">
+          <span class="user-identity-cell" role="cell">
+            <span class="profile-avatar" aria-hidden="true">${escapeHtml(initialsFromUser(user))}</span>
+            <span class="user-row-main">
+              <strong>${escapeHtml(user.name || "Unnamed user")}</strong>
+              <small>${escapeHtml(user.email)}</small>
+            </span>
           </span>
-          <span class="status-chip ${status.className}">
+          <span class="role-chip" role="cell">${escapeHtml(formatUserRole(user.role))}</span>
+          <span class="status-chip ${status.className}" role="cell">
             ${status.label}
           </span>
-        </button>
+          <span class="user-data-cell" role="cell">${escapeHtml(formatUserDate(user.created_at))}</span>
+          <span class="user-data-cell" role="cell">${escapeHtml(formatUserDate(user.last_login_at))}</span>
+          <span class="user-data-cell" role="cell">${escapeHtml(formatAuthMethod(user.last_auth_method || user.first_auth_method))}</span>
+          <span class="user-action-cell" role="cell">
+            <button
+              class="icon-action user-edit-button"
+              type="button"
+              data-action="edit-user"
+              data-user-id="${escapeHtml(user.id)}"
+              aria-label="Edit ${escapeHtml(user.email)}"
+              title="Edit user"
+            >
+              ${renderPencilIcon()}
+            </button>
+          </span>
+        </div>
       `;
     })
     .join("");
@@ -1910,112 +1968,117 @@ function userStatus(user) {
   return { className: "active", label: "Active" };
 }
 
-function renderEmptyUserDetail() {
-  return `
-    <div class="panel-heading">
-      <span class="eyebrow">User details</span>
-      <h3>No user selected</h3>
-    </div>
-    <p class="form-message">Create users through hosted auth or service integrations, then manage them here.</p>
-  `;
-}
+function renderUserEditDialog() {
+  const user = editingUser();
+  if (!user) {
+    return "";
+  }
 
-function renderUserDetail(user) {
   const metadata = stringifyMetadata(user.user_metadata);
   return `
-    <form class="user-editor" data-form="user-update" data-user-id="${escapeHtml(user.id)}">
-      <div class="panel-heading">
-        <span class="eyebrow">User details</span>
-        <h3>${escapeHtml(user.name || user.email)}</h3>
-      </div>
-      <div class="user-activity-grid" aria-label="User activity">
-        <div>
-          <span>Created</span>
-          <strong>${escapeHtml(formatUserDate(user.created_at))}</strong>
+    <div class="dialog-backdrop" role="presentation">
+      <section
+        class="user-edit-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="user-edit-title"
+      >
+        <div class="dialog-header">
+          <div class="dialog-title-group">
+            <span class="profile-avatar" aria-hidden="true">${escapeHtml(initialsFromUser(user))}</span>
+            <div>
+              <span class="eyebrow">Edit user</span>
+              <h3 id="user-edit-title">${escapeHtml(user.name || user.email)}</h3>
+              <p>${escapeHtml(user.email)}</p>
+            </div>
+          </div>
+          <button class="icon-action dialog-close" type="button" data-action="close-user-dialog" aria-label="Close user editor">
+            Close
+          </button>
         </div>
-        <div>
-          <span>First method</span>
-          <strong>${escapeHtml(formatAuthMethod(user.first_auth_method))}</strong>
-        </div>
-        <div>
-          <span>Last login</span>
-          <strong>${escapeHtml(formatUserDate(user.last_login_at))}</strong>
-        </div>
-        <div>
-          <span>Last method</span>
-          <strong>${escapeHtml(formatAuthMethod(user.last_auth_method))}</strong>
-        </div>
-        <div>
-          <span>Login count</span>
-          <strong>${escapeHtml(String(user.login_count || 0))}</strong>
-        </div>
-      </div>
-      <div class="form-grid two-columns">
-        <label class="field">
-          <span>Name</span>
-          <input name="name" type="text" value="${escapeHtml(user.name)}" placeholder="Jane Appleseed" />
-        </label>
-        <label class="field">
-          <span>Email</span>
-          <input name="email" type="email" value="${escapeHtml(user.email)}" />
-        </label>
-        <label class="field">
-          <span>Role</span>
-          <select name="role">
-            ${["user", "admin", "owner"]
-              .map(
-                (role) =>
-                  `<option value="${role}" ${user.role === role ? "selected" : ""}>${role}</option>`,
-              )
-              .join("")}
-          </select>
-        </label>
-        <div class="user-flags" aria-label="User status">
-          <label class="toggle-row compact">
-            <input name="is_active" type="checkbox" ${user.is_active ? "checked" : ""} />
-            <span class="toggle-control" aria-hidden="true"></span>
-            <span>Active</span>
-          </label>
-          <label class="toggle-row compact">
-            <input name="email_verified" type="checkbox" ${user.email_verified ? "checked" : ""} />
-            <span class="toggle-control" aria-hidden="true"></span>
-            <span>Email verified</span>
-          </label>
-          <label class="toggle-row compact">
-            <input name="is_blocked" type="checkbox" ${user.is_blocked ? "checked" : ""} />
-            <span class="toggle-control" aria-hidden="true"></span>
-            <span>Blocked</span>
-          </label>
-        </div>
-        <label class="field full-span">
-          <span>Blocked message</span>
-          <textarea name="blocked_message" rows="3" placeholder="${escapeHtml(defaultBlockedMessage)}">${escapeHtml(
-            user.blocked_message || "",
-          )}</textarea>
-        </label>
-        <label class="field full-span">
-          <span>Metadata JSON</span>
-          <textarea name="user_metadata" rows="9" spellcheck="false" placeholder='{"plan":"pro"}'>${escapeHtml(
-            metadata,
-          )}</textarea>
-        </label>
-      </div>
-      <div class="user-editor-actions">
-        <button class="secondary-action" type="button" data-action="toggle-user-active" data-user-id="${escapeHtml(
-          user.id,
-        )}" data-next-active="${user.is_active ? "false" : "true"}" ${state.busy ? "disabled" : ""}>
-          ${user.is_active ? "Deactivate" : "Reactivate"}
-        </button>
-        <button class="secondary-action danger-action" type="button" data-action="toggle-user-blocked" data-user-id="${escapeHtml(
-          user.id,
-        )}" data-next-blocked="${user.is_blocked ? "false" : "true"}" ${state.busy ? "disabled" : ""}>
-          ${user.is_blocked ? "Unblock" : "Block user"}
-        </button>
-        <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-          ${state.busy ? "Saving..." : "Save user"}
-        </button>
-      </div>
-    </form>
+        <form class="user-editor" data-form="user-update" data-user-id="${escapeHtml(user.id)}">
+          <div class="user-activity-grid" aria-label="User activity">
+            <div>
+              <span>Created</span>
+              <strong>${escapeHtml(formatUserDate(user.created_at))}</strong>
+            </div>
+            <div>
+              <span>First method</span>
+              <strong>${escapeHtml(formatAuthMethod(user.first_auth_method))}</strong>
+            </div>
+            <div>
+              <span>Last login</span>
+              <strong>${escapeHtml(formatUserDate(user.last_login_at))}</strong>
+            </div>
+            <div>
+              <span>Last method</span>
+              <strong>${escapeHtml(formatAuthMethod(user.last_auth_method))}</strong>
+            </div>
+            <div>
+              <span>Login count</span>
+              <strong>${escapeHtml(String(user.login_count || 0))}</strong>
+            </div>
+          </div>
+          <div class="form-grid two-columns">
+            <label class="field">
+              <span>Name</span>
+              <input name="name" type="text" value="${escapeHtml(user.name)}" placeholder="Jane Appleseed" />
+            </label>
+            <label class="field">
+              <span>Email</span>
+              <input name="email" type="email" value="${escapeHtml(user.email)}" />
+            </label>
+            <label class="field">
+              <span>Role</span>
+              ${renderRoleSelect(user.role)}
+            </label>
+            <div class="user-flags" aria-label="User status">
+              <label class="toggle-row compact">
+                <input name="is_active" type="checkbox" ${user.is_active ? "checked" : ""} />
+                <span class="toggle-control" aria-hidden="true"></span>
+                <span>Active</span>
+              </label>
+              <label class="toggle-row compact">
+                <input name="email_verified" type="checkbox" ${user.email_verified ? "checked" : ""} />
+                <span class="toggle-control" aria-hidden="true"></span>
+                <span>Email verified</span>
+              </label>
+              <label class="toggle-row compact">
+                <input name="is_blocked" type="checkbox" ${user.is_blocked ? "checked" : ""} />
+                <span class="toggle-control" aria-hidden="true"></span>
+                <span>Blocked</span>
+              </label>
+            </div>
+            <label class="field full-span">
+              <span>Blocked message</span>
+              <textarea name="blocked_message" rows="3" placeholder="${escapeHtml(defaultBlockedMessage)}">${escapeHtml(
+                user.blocked_message || "",
+              )}</textarea>
+            </label>
+            <label class="field full-span">
+              <span>Metadata JSON</span>
+              <textarea name="user_metadata" rows="9" spellcheck="false" placeholder='{"plan":"pro"}'>${escapeHtml(
+                metadata,
+              )}</textarea>
+            </label>
+          </div>
+          <div class="user-editor-actions">
+            <button class="secondary-action danger-action" type="button" data-action="delete-user" data-user-id="${escapeHtml(
+              user.id,
+            )}" ${state.busy ? "disabled" : ""}>
+              Delete user
+            </button>
+            <span class="dialog-action-spacer" aria-hidden="true"></span>
+            <button class="secondary-action" type="button" data-action="close-user-dialog" ${state.busy ? "disabled" : ""}>
+              Cancel
+            </button>
+            <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+              ${state.busy ? "Saving..." : "Save user"}
+            </button>
+          </div>
+        </form>
+      </section>
+    </div>
   `;
 }
 
@@ -3007,7 +3070,44 @@ async function updateUser(userId, payload, successMessage) {
     });
     state.users = state.users.map((user) => (user.id === updatedUser.id ? updatedUser : user));
     state.selectedUserId = updatedUser.id;
+    state.editingUserId = "";
     state.message = successMessage;
+    await loadUsers({ query: state.usersQuery, quiet: true });
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleUserDelete(userId) {
+  if (!userId) {
+    state.error = "Select a user first.";
+    render();
+    return;
+  }
+
+  const user = state.users.find((candidate) => candidate.id === userId);
+  const label = user?.email || "this user";
+  if (!window.confirm(`Delete ${label}? This cannot be undone.`)) {
+    return;
+  }
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    await api(`/api/v1/dashboard/users/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    });
+    state.users = state.users.filter((candidate) => candidate.id !== userId);
+    state.usersTotal = Math.max(0, state.usersTotal - 1);
+    state.selectedUserId = state.users[0]?.id || "";
+    state.editingUserId = "";
+    state.message = "User deleted.";
     await loadUsers({ query: state.usersQuery, quiet: true });
   } catch (error) {
     state.error = error.message;
@@ -3091,6 +3191,13 @@ app.addEventListener("submit", (event) => {
 });
 
 app.addEventListener("click", (event) => {
+  if (event.target.classList.contains("dialog-backdrop")) {
+    state.editingUserId = "";
+    state.error = "";
+    render();
+    return;
+  }
+
   const colorPreset = event.target.closest("[data-color-preset]");
   if (colorPreset) {
     const colorField = colorPreset.closest(".color-field");
@@ -3119,6 +3226,7 @@ app.addEventListener("click", (event) => {
     state.users = [];
     state.usersLoaded = false;
     state.selectedUserId = "";
+    state.editingUserId = "";
     state.authMode = "login";
     state.message = "";
     state.error = "";
@@ -3157,37 +3265,21 @@ app.addEventListener("click", (event) => {
       void handleTemplateSave(form, index);
     }
   }
-  if (action === "select-user") {
-    state.selectedUserId = actionButton.dataset.userId || "";
+  if (action === "edit-user") {
+    state.editingUserId = actionButton.dataset.userId || "";
     state.error = "";
     state.message = "";
     render();
   }
-  if (action === "toggle-user-active") {
-    const userId = actionButton.dataset.userId || "";
-    const isActive = actionButton.dataset.nextActive === "true";
-    if (userId) {
-      void updateUser(userId, { is_active: isActive }, isActive ? "User reactivated." : "User deactivated.");
-    }
+  if (action === "close-user-dialog") {
+    state.editingUserId = "";
+    state.error = "";
+    render();
   }
-  if (action === "toggle-user-blocked") {
+  if (action === "delete-user") {
     const userId = actionButton.dataset.userId || "";
-    const isBlocked = actionButton.dataset.nextBlocked === "true";
-    const form = event.target.closest("form");
-    const formData = form ? new FormData(form) : null;
-    const selected = selectedUser();
-    const blockedMessage = String(
-      formData?.get("blocked_message") || selected?.blocked_message || defaultBlockedMessage,
-    ).trim();
     if (userId) {
-      void updateUser(
-        userId,
-        {
-          is_blocked: isBlocked,
-          blocked_message: isBlocked ? blockedMessage : "",
-        },
-        isBlocked ? "User blocked." : "User unblocked.",
-      );
+      void handleUserDelete(userId);
     }
   }
   if (action === "hosted-google-start") {

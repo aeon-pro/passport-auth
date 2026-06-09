@@ -887,13 +887,9 @@ p {
 
 .users-workspace {
   display: grid;
-  grid-template-columns: minmax(280px, 0.86fr) minmax(420px, 1.14fr);
-  gap: 16px;
-  align-items: start;
 }
 
-.users-list-panel,
-.user-detail-panel {
+.users-table-panel {
   display: grid;
   gap: 16px;
   border: 1px solid var(--line-soft);
@@ -911,31 +907,55 @@ p {
   align-items: end;
 }
 
-.user-list {
+.users-table {
   display: grid;
-  gap: 8px;
+  overflow-x: auto;
+}
+
+.users-table-head,
+.user-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.35fr) 90px 104px 132px 132px 126px 54px;
+  align-items: center;
+  min-width: 940px;
+}
+
+.users-table-head {
+  gap: 12px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  font-weight: 620;
+  padding: 0 10px 10px;
+  text-transform: uppercase;
+}
+
+.user-list {
+  display: contents;
 }
 
 .user-row {
-  display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  min-height: 62px;
+  gap: 8px;
+  min-height: 76px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: transparent;
   color: var(--ink);
-  text-align: left;
   padding: 10px;
 }
 
 .user-row:hover,
-.user-row:focus-visible,
-.user-row.active {
+.user-row:focus-within {
   border-color: var(--line-soft);
-  background: rgba(255, 255, 255, 0.026);
-  outline: none;
+  background: rgba(255, 255, 255, 0.022);
+}
+
+.user-identity-cell {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .user-row-main {
@@ -959,13 +979,19 @@ p {
   white-space: nowrap;
 }
 
+.role-chip,
 .status-chip {
+  width: fit-content;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--ink-muted);
   font-size: 10.5px;
   font-weight: 560;
   padding: 4px 8px;
+}
+
+.role-chip {
+  color: var(--ink);
 }
 
 .status-chip.active {
@@ -981,6 +1007,110 @@ p {
 .status-chip.blocked {
   border-color: rgba(255, 111, 111, 0.3);
   color: #ff9b9b;
+}
+
+.user-data-cell {
+  overflow: hidden;
+  color: var(--ink-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.user-action-cell {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.icon-action {
+  display: inline-flex;
+  min-width: 40px;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--ink);
+}
+
+.icon-action:hover,
+.icon-action:focus-visible {
+  border-color: #606068;
+  background: rgba(255, 255, 255, 0.046);
+  outline: none;
+}
+
+.icon-action svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.68);
+  padding: 24px;
+}
+
+.user-edit-dialog {
+  display: grid;
+  width: min(940px, 100%);
+  max-height: min(860px, calc(100vh - 48px));
+  gap: 18px;
+  overflow: auto;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 180px),
+    #101012;
+  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.54);
+  padding: 22px;
+}
+
+.dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.dialog-title-group {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.dialog-title-group h3 {
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 430;
+}
+
+.dialog-title-group p {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.dialog-close {
+  min-width: auto;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+}
+
+.role-select-field {
+  height: 45px;
 }
 
 .user-editor {
@@ -1037,8 +1167,12 @@ p {
 .user-editor-actions {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 12px;
+}
+
+.dialog-action-spacer {
+  flex: 1 1 auto;
 }
 
 .danger-action {

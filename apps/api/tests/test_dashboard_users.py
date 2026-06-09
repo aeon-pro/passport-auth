@@ -154,6 +154,33 @@ async def test_dashboard_users_show_auth_activity_after_login() -> None:
 
 
 @pytest.mark.asyncio
+async def test_dashboard_users_delete_user_removes_user_from_directory() -> None:
+    auth_store, app = create_users_app()
+    user = auth_store.create_user(
+        email="delete-me@example.com",
+        name="Delete Me",
+        password="correct-horse-battery-staple",
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await login_owner(client)
+        headers = {"Authorization": f"Bearer {token}"}
+        delete_response = await client.delete(f"/api/v1/dashboard/users/{user.id}", headers=headers)
+        list_response = await client.get(
+            "/api/v1/dashboard/users",
+            headers=headers,
+            params={"query": "delete-me@example.com"},
+        )
+
+    assert delete_response.status_code == 200
+    assert delete_response.json() == {"ok": True}
+    assert auth_store.get_user_by_id(user.id) is None
+    assert list_response.status_code == 200
+    assert list_response.json()["total"] == 0
+
+
+@pytest.mark.asyncio
 async def test_dashboard_users_deactivate_blocks_password_login() -> None:
     auth_store, app = create_users_app()
     user = auth_store.create_user(

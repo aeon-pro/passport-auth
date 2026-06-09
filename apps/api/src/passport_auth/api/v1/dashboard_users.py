@@ -38,6 +38,10 @@ class DashboardUsersResponse(BaseModel):
     total: int
 
 
+class OkResponse(BaseModel):
+    ok: bool
+
+
 class DashboardUserUpdate(BaseModel):
     email: str | None = Field(default=None, min_length=3, max_length=320)
     name: str | None = Field(default=None, max_length=120)
@@ -141,3 +145,15 @@ def update_dashboard_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 
     return build_user_response(user)
+
+
+@router.delete("/{user_id}")
+def delete_dashboard_user(
+    user_id: str,
+    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+) -> OkResponse:
+    if not auth_store.delete_user(user_id=user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+
+    return OkResponse(ok=True)
