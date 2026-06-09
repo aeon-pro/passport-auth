@@ -79,6 +79,14 @@ class AuthStore(Protocol):
 
     def update_user_password(self, *, email: str, password: str) -> None: ...
 
+    def update_user_profile(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        email_verified: bool | None = None,
+    ) -> AuthUser | None: ...
+
     def create_pending_registration(
         self,
         *,
@@ -206,6 +214,31 @@ class InMemoryAuthStore:
         )
         self.users_by_id[user.id] = updated
         self.users_by_email[user.email] = updated
+
+    def update_user_profile(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        email_verified: bool | None = None,
+    ) -> AuthUser | None:
+        user = self.get_user_by_email(email)
+        if not user:
+            return None
+
+        updated = AuthUser(
+            id=user.id,
+            email=user.email,
+            name=name if name is not None else user.name,
+            password_hash=user.password_hash,
+            role=user.role,
+            is_active=user.is_active,
+            email_verified=email_verified if email_verified is not None else user.email_verified,
+        )
+        self.users_by_id[user.id] = updated
+        self.users_by_email[user.email] = updated
+        return updated
+
 
     def create_pending_registration(
         self,
@@ -430,6 +463,29 @@ class PostgresAuthStore:
                     """,
                     (hash_password(password), email.strip().lower()),
                 )
+
+    def update_user_profile(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        email_verified: bool | None = None,
+    ) -> AuthUser | None:
+        self._ensure_schema()
+        with self._connect() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    """
+                    UPDATE auth_users
+                    SET name = COALESCE(%s, name),
+                        email_verified = COALESCE(%s, email_verified)
+                    WHERE email = %s
+                    RETURNING id::text, email, name, password_hash, role, is_active, email_verified
+                    """,
+                    (name, email_verified, email.strip().lower()),
+                ).fetchone()
+
+        return _auth_user_from_row(row)
 
     def create_pending_registration(
         self,

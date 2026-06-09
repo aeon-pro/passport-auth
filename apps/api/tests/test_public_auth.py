@@ -45,7 +45,7 @@ class FakeGoogleOAuthClient:
     def exchange_code(self, *, code: str, settings: DashboardSettings) -> dict[str, str]:
         assert code == "google-provider-code"
         assert settings.google_client_secret == "google-secret"
-        return {"email": "google@example.com"}
+        return {"email": "google@example.com", "name": "Google User"}
 
 
 def create_public_auth_app() -> tuple[InMemoryAuthStore, RecordingEmailSender, object]:
@@ -360,8 +360,9 @@ async def test_public_password_reset_otp_updates_user_password() -> None:
 
 
 @pytest.mark.asyncio
-async def test_public_google_oauth_start_and_callback_issue_auth_code() -> None:
-    _, _, app = create_public_auth_app()
+async def test_public_google_oauth_start_and_callback_issue_auth_code_with_google_name() -> None:
+    auth_store, _, app = create_public_auth_app()
+    auth_store.create_user(email="google@example.com")
     transport = ASGITransport(app=app)
     verifier = "correct horse battery staple public verifier"
 
@@ -379,9 +380,18 @@ async def test_public_google_oauth_start_and_callback_issue_auth_code() -> None:
             "/api/v1/auth/google/callback",
             params={"state": state, "code": "google-provider-code", "response": "json"},
         )
+        token_response = await client.post(
+            "/api/v1/auth/token",
+            json={
+                "code": callback_response.json()["authorization_code"],
+                "code_verifier": verifier,
+            },
+        )
 
     assert start_response.status_code == 200
     assert "accounts.google.com" in authorization_url
     assert callback_response.status_code == 200
     assert callback_response.json()["redirect_url"] == "https://app.example.com/auth/callback"
     assert "authorization_code" in callback_response.json()
+    assert token_response.status_code == 200
+    assert token_response.json()["user"]["name"] == "Google User"

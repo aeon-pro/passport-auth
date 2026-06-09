@@ -57,13 +57,20 @@ class UrlLibGoogleOAuthClient:
 
         access_token = str(token_body.get("access_token") or "")
         id_token = str(token_body.get("id_token") or "")
-        email = _email_from_id_token(id_token)
-        if not email and access_token:
-            email = _email_from_userinfo(access_token)
+        profile = _profile_from_id_token(id_token)
+        if access_token and (not profile.get("email") or not profile.get("name")):
+            userinfo_profile = _profile_from_userinfo(access_token)
+            id_token_profile = {key: value for key, value in profile.items() if value}
+            profile = {**userinfo_profile, **id_token_profile}
+
+        email = str(profile.get("email") or "").strip().lower()
         if not email:
             raise GoogleOAuthError("Google did not return an email address.")
 
-        return {"email": email}
+        return {
+            "email": email,
+            "name": str(profile.get("name") or "").strip(),
+        }
 
 
 def google_redirect_uri(settings: DashboardSettings) -> str:
@@ -78,21 +85,23 @@ def _origin_from_domain(domain: str) -> str:
     return f"https://{cleaned or 'localhost:8000'}"
 
 
-def _email_from_id_token(id_token: str) -> str:
+def _profile_from_id_token(id_token: str) -> dict[str, str]:
     parts = id_token.split(".")
     if len(parts) < 2:
-        return ""
+        return {}
 
     try:
         payload = json.loads(_base64url_decode(parts[1]).decode("utf-8"))
     except (ValueError, TypeError):
-        return ""
+        return {}
 
-    email = str(payload.get("email") or "").strip().lower()
-    return email if email else ""
+    return {
+        "email": str(payload.get("email") or "").strip().lower(),
+        "name": str(payload.get("name") or "").strip(),
+    }
 
 
-def _email_from_userinfo(access_token: str) -> str:
+def _profile_from_userinfo(access_token: str) -> dict[str, str]:
     request = urllib.request.Request(
         "https://www.googleapis.com/oauth2/v3/userinfo",
         headers={"Authorization": f"Bearer {access_token}"},
@@ -105,7 +114,10 @@ def _email_from_userinfo(access_token: str) -> str:
     except (OSError, ValueError) as exc:
         raise GoogleOAuthError("Google user profile fetch failed.") from exc
 
-    return str(body.get("email") or "").strip().lower()
+    return {
+        "email": str(body.get("email") or "").strip().lower(),
+        "name": str(body.get("name") or "").strip(),
+    }
 
 
 def _base64url_decode(value: str) -> bytes:

@@ -280,6 +280,12 @@ def get_or_create_public_user(
 ) -> AuthUser:
     existing_user = auth_store.get_user_by_email(email)
     if existing_user:
+        if name and not existing_user.name:
+            return auth_store.update_user_profile(
+                email=email,
+                name=name,
+                email_verified=True,
+            ) or existing_user
         return existing_user
     return auth_store.create_user(email=email, name=name, email_verified=True)
 
