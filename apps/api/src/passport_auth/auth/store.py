@@ -16,9 +16,11 @@ class AuthUserAlreadyExistsError(Exception):
 class AuthUser:
     id: str
     email: str
+    name: str = ""
     password_hash: str | None = None
     role: str = "user"
     is_active: bool = True
+    email_verified: bool = True
 
 
 @dataclass(frozen=True)
@@ -50,14 +52,52 @@ class OAuthState:
     expires_at: int
 
 
+@dataclass(frozen=True)
+class PendingRegistration:
+    email: str
+    name: str
+    password_hash: str
+    redirect_url: str
+    code_challenge: str
+    expires_at: int
+
+
 class AuthStore(Protocol):
-    def create_user(self, *, email: str, password: str | None = None) -> AuthUser: ...
+    def create_user(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        password: str | None = None,
+        password_hash: str | None = None,
+        email_verified: bool = True,
+    ) -> AuthUser: ...
 
     def get_user_by_email(self, email: str) -> AuthUser | None: ...
 
     def get_user_by_id(self, user_id: str) -> AuthUser | None: ...
 
     def update_user_password(self, *, email: str, password: str) -> None: ...
+
+    def create_pending_registration(
+        self,
+        *,
+        email: str,
+        name: str,
+        password: str,
+        redirect_url: str,
+        code_challenge: str,
+        otp: str,
+        expires_at: int,
+    ) -> None: ...
+
+    def consume_pending_registration(
+        self,
+        *,
+        email: str,
+        otp: str,
+        now: int,
+    ) -> PendingRegistration | None: ...
 
     def create_auth_code(
         self,
@@ -116,10 +156,19 @@ class InMemoryAuthStore:
         self.auth_codes: dict[str, AuthCode] = {}
         self.refresh_tokens: dict[str, RefreshToken] = {}
         self.otps: dict[tuple[str, str], tuple[str, int]] = {}
+        self.pending_registrations: dict[str, tuple[PendingRegistration, str]] = {}
         self.magic_links: dict[str, MagicLink] = {}
         self.oauth_states: dict[str, OAuthState] = {}
 
-    def create_user(self, *, email: str, password: str | None = None) -> AuthUser:
+    def create_user(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        password: str | None = None,
+        password_hash: str | None = None,
+        email_verified: bool = True,
+    ) -> AuthUser:
         normalized_email = email.strip().lower()
         if normalized_email in self.users_by_email:
             raise AuthUserAlreadyExistsError
@@ -127,7 +176,9 @@ class InMemoryAuthStore:
         user = AuthUser(
             id=str(uuid4()),
             email=normalized_email,
-            password_hash=hash_password(password) if password else None,
+            name=name or "",
+            password_hash=password_hash or (hash_password(password) if password else None),
+            email_verified=email_verified,
         )
         self.users_by_id[user.id] = user
         self.users_by_email[user.email] = user
@@ -147,12 +198,57 @@ class InMemoryAuthStore:
         updated = AuthUser(
             id=user.id,
             email=user.email,
+            name=user.name,
             password_hash=hash_password(password),
             role=user.role,
             is_active=user.is_active,
+            email_verified=user.email_verified,
         )
         self.users_by_id[user.id] = updated
         self.users_by_email[user.email] = updated
+
+    def create_pending_registration(
+        self,
+        *,
+        email: str,
+        name: str,
+        password: str,
+        redirect_url: str,
+        code_challenge: str,
+        otp: str,
+        expires_at: int,
+    ) -> None:
+        normalized_email = email.strip().lower()
+        self.pending_registrations[normalized_email] = (
+            PendingRegistration(
+                email=normalized_email,
+                name=name,
+                password_hash=hash_password(password),
+                redirect_url=redirect_url,
+                code_challenge=code_challenge,
+                expires_at=expires_at,
+            ),
+            hash_password(otp),
+        )
+
+    def consume_pending_registration(
+        self,
+        *,
+        email: str,
+        otp: str,
+        now: int,
+    ) -> PendingRegistration | None:
+        normalized_email = email.strip().lower()
+        stored = self.pending_registrations.get(normalized_email)
+        if not stored:
+            return None
+
+        pending_registration, otp_hash = stored
+        if pending_registration.expires_at < now or not verify_password(otp, otp_hash):
+            return None
+
+        del self.pending_registrations[normalized_email]
+        return pending_registration
 
     def create_auth_code(
         self,
@@ -254,22 +350,39 @@ class PostgresAuthStore:
         self._schema_lock = Lock()
         self._schema_ready = False
 
-    def create_user(self, *, email: str, password: str | None = None) -> AuthUser:
+    def create_user(
+        self,
+        *,
+        email: str,
+        name: str | None = None,
+        password: str | None = None,
+        password_hash: str | None = None,
+        email_verified: bool = True,
+    ) -> AuthUser:
         self._ensure_schema()
         user = AuthUser(
             id=str(uuid4()),
             email=email.strip().lower(),
-            password_hash=hash_password(password) if password else None,
+            name=name or "",
+            password_hash=password_hash or (hash_password(password) if password else None),
+            email_verified=email_verified,
         )
         try:
             with self._connect() as conn:
                 with conn.transaction():
                     conn.execute(
                         """
-                        INSERT INTO auth_users (id, email, password_hash, role, is_active)
-                        VALUES (%s, %s, %s, 'user', true)
+                        INSERT INTO auth_users
+                            (id, email, name, password_hash, role, is_active, email_verified)
+                        VALUES (%s, %s, %s, %s, 'user', true, %s)
                         """,
-                        (user.id, user.email, user.password_hash),
+                        (
+                            user.id,
+                            user.email,
+                            user.name,
+                            user.password_hash,
+                            user.email_verified,
+                        ),
                     )
         except Exception as exc:
             if "auth_users_email_key" in str(exc):
@@ -282,7 +395,7 @@ class PostgresAuthStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id::text, email, password_hash, role, is_active
+                SELECT id::text, email, name, password_hash, role, is_active, email_verified
                 FROM auth_users
                 WHERE email = %s
                 LIMIT 1
@@ -296,7 +409,7 @@ class PostgresAuthStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id::text, email, password_hash, role, is_active
+                SELECT id::text, email, name, password_hash, role, is_active, email_verified
                 FROM auth_users
                 WHERE id = %s
                 LIMIT 1
@@ -317,6 +430,110 @@ class PostgresAuthStore:
                     """,
                     (hash_password(password), email.strip().lower()),
                 )
+
+    def create_pending_registration(
+        self,
+        *,
+        email: str,
+        name: str,
+        password: str,
+        redirect_url: str,
+        code_challenge: str,
+        otp: str,
+        expires_at: int,
+    ) -> None:
+        self._ensure_schema()
+        expires_at_datetime = datetime.fromtimestamp(expires_at, tz=UTC)
+
+        with self._connect() as conn:
+            with conn.transaction():
+                conn.execute(
+                    """
+                    INSERT INTO pending_registrations
+                        (
+                            email,
+                            name,
+                            password_hash,
+                            redirect_url,
+                            code_challenge,
+                            otp_hash,
+                            expires_at,
+                            created_at
+                        )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, now())
+                    ON CONFLICT (email) DO UPDATE
+                    SET name = EXCLUDED.name,
+                        password_hash = EXCLUDED.password_hash,
+                        redirect_url = EXCLUDED.redirect_url,
+                        code_challenge = EXCLUDED.code_challenge,
+                        otp_hash = EXCLUDED.otp_hash,
+                        expires_at = EXCLUDED.expires_at,
+                        created_at = now()
+                    """,
+                    (
+                        email.strip().lower(),
+                        name,
+                        hash_password(password),
+                        redirect_url,
+                        code_challenge,
+                        hash_password(otp),
+                        expires_at_datetime,
+                    ),
+                )
+
+    def consume_pending_registration(
+        self,
+        *,
+        email: str,
+        otp: str,
+        now: int,
+    ) -> PendingRegistration | None:
+        self._ensure_schema()
+        normalized_email = email.strip().lower()
+        now_datetime = datetime.fromtimestamp(now, tz=UTC)
+
+        with self._connect() as conn:
+            with conn.transaction():
+                row = conn.execute(
+                    """
+                    SELECT
+                        email,
+                        name,
+                        password_hash,
+                        redirect_url,
+                        code_challenge,
+                        otp_hash,
+                        expires_at
+                    FROM pending_registrations
+                    WHERE email = %s
+                    LIMIT 1
+                    """,
+                    (normalized_email,),
+                ).fetchone()
+
+                if (
+                    not row
+                    or row[6] < now_datetime
+                    or not verify_password(otp, row[5])
+                ):
+                    return None
+
+                conn.execute(
+                    """
+                    DELETE FROM pending_registrations
+                    WHERE email = %s
+                    """,
+                    (normalized_email,),
+                )
+
+        return PendingRegistration(
+            email=row[0],
+            name=row[1],
+            password_hash=row[2],
+            redirect_url=row[3],
+            code_challenge=row[4],
+            expires_at=int(row[6].timestamp()),
+        )
 
     def create_auth_code(
         self,
@@ -572,9 +789,37 @@ class PostgresAuthStore:
                         CREATE TABLE IF NOT EXISTS auth_users (
                             id UUID PRIMARY KEY,
                             email TEXT NOT NULL UNIQUE,
+                            name TEXT NOT NULL DEFAULT '',
                             password_hash TEXT,
                             role TEXT NOT NULL DEFAULT 'user',
                             is_active BOOLEAN NOT NULL DEFAULT true,
+                            email_verified BOOLEAN NOT NULL DEFAULT true,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                        )
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT ''
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_users
+                        ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT true
+                        """
+                    )
+                    conn.execute(
+                        """
+                        CREATE TABLE IF NOT EXISTS pending_registrations (
+                            email TEXT PRIMARY KEY,
+                            name TEXT NOT NULL,
+                            password_hash TEXT NOT NULL,
+                            redirect_url TEXT NOT NULL,
+                            code_challenge TEXT NOT NULL,
+                            otp_hash TEXT NOT NULL,
+                            expires_at TIMESTAMPTZ NOT NULL,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
                         """
@@ -659,9 +904,11 @@ def _auth_user_from_row(row) -> AuthUser | None:
     return AuthUser(
         id=row[0],
         email=row[1],
-        password_hash=row[2],
-        role=row[3],
-        is_active=bool(row[4]),
+        name=row[2],
+        password_hash=row[3],
+        role=row[4],
+        is_active=bool(row[5]),
+        email_verified=bool(row[6]),
     )
 
 

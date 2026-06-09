@@ -91,6 +91,8 @@ const state = {
   onboarding: { ...defaultOnboarding, email_templates: cloneEmailTemplates() },
   resetEmail: "",
   devOtp: "",
+  hostedRegisterEmail: "",
+  hostedRegisterDevCode: "",
   hostedOtpEmail: "",
   hostedOtpDevCode: "",
   hostedResetEmail: "",
@@ -1353,18 +1355,42 @@ function renderHostedMissingContext() {
 function renderHostedAuthContent(path, context) {
   if (path === "/register") {
     return `
-      <form class="form-grid" data-form="hosted-register">
+      <form class="form-grid" data-form="${state.hostedRegisterEmail ? "hosted-register-verify" : "hosted-register"}">
+        ${state.hostedRegisterDevCode ? `<p class="dev-otp">Development OTP: ${escapeHtml(state.hostedRegisterDevCode)}</p>` : ""}
+        ${
+          state.hostedRegisterEmail
+            ? ""
+            : `
+              <label class="field">
+                <span>Name</span>
+                <input name="name" type="text" autocomplete="name" placeholder="Jane Appleseed" required />
+              </label>
+            `
+        }
         <label class="field">
           <span>Email</span>
-          <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+          <input name="email" type="email" autocomplete="email" value="${escapeHtml(
+            state.hostedRegisterEmail,
+          )}" placeholder="you@example.com" required ${state.hostedRegisterEmail ? "readonly" : ""} />
         </label>
-        <label class="field">
-          <span>Password</span>
-          <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
-        </label>
+        ${
+          state.hostedRegisterEmail
+            ? `
+              <label class="field">
+                <span>OTP</span>
+                <input name="otp" type="text" inputmode="numeric" placeholder="123456" required />
+              </label>
+            `
+            : `
+              <label class="field">
+                <span>Password</span>
+                <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
+              </label>
+            `
+        }
         <div class="form-actions">
           <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-            ${state.busy ? "Creating..." : "Create account"}
+            ${state.busy ? "Working..." : state.hostedRegisterEmail ? "Verify email" : "Create account"}
           </button>
           <a class="text-action" href="${hostedLink("/login")}" data-link>Sign in</a>
         </div>
@@ -2145,6 +2171,7 @@ function hostedPayloadFromForm(form) {
   const formData = new FormData(form);
   const context = hostedAuthContext();
   return {
+    name: String(formData.get("name") || "").trim(),
     email: String(formData.get("email") || "").trim(),
     password: String(formData.get("password") || ""),
     otp: String(formData.get("otp") || "").trim(),
@@ -2183,9 +2210,36 @@ async function handleHostedRegister(form) {
   render();
 
   try {
-    const authCode = await publicApi("/api/v1/auth/register", {
+    const start = await publicApi("/api/v1/auth/register", {
       method: "POST",
       body: JSON.stringify(payload),
+    });
+    state.hostedRegisterEmail = payload.email;
+    state.hostedRegisterDevCode = start.dev_otp || "";
+    state.message = "Enter the code sent to your email.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleHostedRegisterVerify(form) {
+  const payload = hostedPayloadFromForm(form);
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    const authCode = await publicApi("/api/v1/auth/register/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        email: state.hostedRegisterEmail || payload.email,
+        otp: payload.otp,
+      }),
     });
     completeHostedAuth(authCode);
   } catch (error) {
@@ -2509,6 +2563,9 @@ app.addEventListener("submit", (event) => {
   }
   if (formName === "hosted-register") {
     void handleHostedRegister(form);
+  }
+  if (formName === "hosted-register-verify") {
+    void handleHostedRegisterVerify(form);
   }
   if (formName === "hosted-otp-start") {
     void handleHostedOtpStart(form);

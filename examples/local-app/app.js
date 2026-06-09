@@ -39,8 +39,15 @@ function cleanAuthBase(value) {
 }
 
 function displayName(user) {
-  const emailName = String(user?.email || "").split("@")[0];
-  return user?.name || emailName || "Signed in user";
+  const emailName = String(user?.email || "")
+    .split("@")[0]
+    .replace(/[._-]+/g, " ");
+  const fallbackName = emailName
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ");
+  return user?.name || fallbackName || "Signed in user";
 }
 
 function tokenPayload(token) {

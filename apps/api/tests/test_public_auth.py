@@ -83,26 +83,66 @@ def create_public_auth_app() -> tuple[InMemoryAuthStore, RecordingEmailSender, o
     return auth_store, email_sender, app
 
 
+async def register_verified_user(
+    client: AsyncClient,
+    *,
+    email: str,
+    verifier: str,
+    name: str = "Test User",
+    password: str = "correct-horse-battery-staple",
+    redirect_url: str = "https://app.example.com/auth/callback",
+) -> dict[str, str]:
+    start_response = await client.post(
+        "/api/v1/auth/register",
+        json={
+            "name": name,
+            "email": email,
+            "password": password,
+            "redirect_url": redirect_url,
+            "code_challenge": pkce_challenge(verifier),
+        },
+    )
+    verify_response = await client.post(
+        "/api/v1/auth/register/verify",
+        json={
+            "email": email,
+            "otp": start_response.json()["dev_otp"],
+        },
+    )
+    assert start_response.status_code == 200
+    assert verify_response.status_code == 200
+    return verify_response.json()
+
+
 @pytest.mark.asyncio
-async def test_public_password_register_issues_pkce_code_and_exchanges_for_tokens() -> None:
+async def test_public_password_register_requires_email_otp_before_issuing_auth_code() -> None:
     verifier = "correct horse battery staple public verifier"
-    _, _, app = create_public_auth_app()
+    _, email_sender, app = create_public_auth_app()
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        register_response = await client.post(
+        register_start = await client.post(
             "/api/v1/auth/register",
             json={
+                "name": "  anurag  sharma ",
                 "email": "user@example.com",
                 "password": "correct-horse-battery-staple",
                 "redirect_url": "https://app.example.com/auth/callback",
                 "code_challenge": pkce_challenge(verifier),
             },
         )
+        invalid_verify = await client.post(
+            "/api/v1/auth/register/verify",
+            json={"email": "user@example.com", "otp": "000000"},
+        )
+        verify_response = await client.post(
+            "/api/v1/auth/register/verify",
+            json={"email": "user@example.com", "otp": register_start.json()["dev_otp"]},
+        )
         token_response = await client.post(
             "/api/v1/auth/token",
             json={
-                "code": register_response.json()["authorization_code"],
+                "code": verify_response.json()["authorization_code"],
                 "code_verifier": verifier,
             },
         )
@@ -111,19 +151,29 @@ async def test_public_password_register_issues_pkce_code_and_exchanges_for_token
             headers={"Authorization": f"Bearer {token_response.json()['access_token']}"},
         )
 
-    assert register_response.status_code == 200
-    assert register_response.json()["redirect_url"] == "https://app.example.com/auth/callback"
-    assert "authorization_code" in register_response.json()
+    assert register_start.status_code == 200
+    assert register_start.json()["sent"] is True
+    assert len(register_start.json()["dev_otp"]) == 6
+    assert "authorization_code" not in register_start.json()
+    assert email_sender.messages[-1]["template_key"] == "otp"
+    assert invalid_verify.status_code == 400
+    assert invalid_verify.json() == {"detail": "Invalid or expired registration code."}
+    assert verify_response.status_code == 200
+    assert verify_response.json()["redirect_url"] == "https://app.example.com/auth/callback"
+    assert "authorization_code" in verify_response.json()
     assert token_response.status_code == 200
     assert token_response.json()["token_type"] == "bearer"
     assert token_response.json()["user"] == {
         "id": me_response.json()["id"],
+        "name": "Anurag Sharma",
         "email": "user@example.com",
         "role": "user",
+        "email_verified": True,
     }
     assert token_response.json()["refresh_token"]
     assert me_response.status_code == 200
     assert me_response.json()["email"] == "user@example.com"
+    assert me_response.json()["name"] == "Anurag Sharma"
 
 
 @pytest.mark.asyncio
@@ -136,6 +186,7 @@ async def test_public_auth_rejects_unknown_redirect_url() -> None:
         response = await client.post(
             "/api/v1/auth/register",
             json={
+                "name": "User Example",
                 "email": "user@example.com",
                 "password": "correct-horse-battery-staple",
                 "redirect_url": "https://evil.example.com/callback",
@@ -218,19 +269,15 @@ async def test_public_refresh_tokens_rotate_and_logout_revokes_current_token() -
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        register_response = await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "rotation@example.com",
-                "password": "correct-horse-battery-staple",
-                "redirect_url": "https://app.example.com/auth/callback",
-                "code_challenge": pkce_challenge(verifier),
-            },
+        register_response = await register_verified_user(
+            client,
+            email="rotation@example.com",
+            verifier=verifier,
         )
         token_response = await client.post(
             "/api/v1/auth/token",
             json={
-                "code": register_response.json()["authorization_code"],
+                "code": register_response["authorization_code"],
                 "code_verifier": verifier,
             },
         )
@@ -267,14 +314,10 @@ async def test_public_password_reset_otp_updates_user_password() -> None:
     transport = ASGITransport(app=app)
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:
-        await client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "reset-user@example.com",
-                "password": "correct-horse-battery-staple",
-                "redirect_url": "https://app.example.com/auth/callback",
-                "code_challenge": pkce_challenge(verifier),
-            },
+        await register_verified_user(
+            client,
+            email="reset-user@example.com",
+            verifier=verifier,
         )
         reset_start = await client.post(
             "/api/v1/auth/password-reset/start",

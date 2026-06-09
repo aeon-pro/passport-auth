@@ -85,6 +85,7 @@ async def test_development_redirect_validation_allows_localhost_http_callback() 
         response = await client.post(
             "/api/v1/auth/register",
             json={
+                "name": "Dev User",
                 "email": "dev@example.com",
                 "password": "correct-horse-battery-staple",
                 "redirect_url": "http://localhost:5173/auth/callback",
@@ -93,7 +94,8 @@ async def test_development_redirect_validation_allows_localhost_http_callback() 
         )
 
     assert response.status_code == 200
-    assert response.json()["redirect_url"] == "http://localhost:5173/auth/callback"
+    assert response.json()["sent"] is True
+    assert len(response.json()["dev_otp"]) == 6
 
 
 @pytest.mark.asyncio
@@ -105,6 +107,7 @@ async def test_production_redirect_validation_rejects_unconfigured_localhost_cal
         response = await client.post(
             "/api/v1/auth/register",
             json={
+                "name": "Dev User",
                 "email": "dev@example.com",
                 "password": "correct-horse-battery-staple",
                 "redirect_url": "http://localhost:5173/auth/callback",

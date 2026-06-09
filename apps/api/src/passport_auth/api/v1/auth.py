@@ -43,11 +43,32 @@ class AuthCodeRequest(BaseModel):
 
 
 class RegisterRequest(AuthCodeRequest):
+    name: str = Field(min_length=1, max_length=120)
+    password: str = Field(min_length=12, max_length=1024)
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return normalize_display_name(value)
+
+
+class PasswordLoginRequest(AuthCodeRequest):
     password: str = Field(min_length=12, max_length=1024)
 
 
-class PasswordLoginRequest(RegisterRequest):
-    pass
+class RegisterVerifyRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+    otp: str = Field(min_length=6, max_length=16)
+
+    @field_validator("email")
+    @classmethod
+    def normalize_email(cls, value: str) -> str:
+        return value.strip().lower()
+
+    @field_validator("otp")
+    @classmethod
+    def strip_otp(cls, value: str) -> str:
+        return value.strip()
 
 
 class OtpVerifyRequest(AuthCodeRequest):
@@ -102,8 +123,10 @@ class PasswordResetConfirmRequest(PasswordResetStartRequest):
 
 class PublicUserResponse(BaseModel):
     id: str
+    name: str
     email: str
     role: str
+    email_verified: bool
 
 
 class AuthCodeResponse(BaseModel):
@@ -155,7 +178,20 @@ def get_google_oauth_client(request: Request) -> GoogleOAuthClient:
 
 
 def public_user_response(user: AuthUser) -> PublicUserResponse:
-    return PublicUserResponse(id=user.id, email=user.email, role=user.role)
+    return PublicUserResponse(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        role=user.role,
+        email_verified=user.email_verified,
+    )
+
+
+def normalize_display_name(value: str) -> str:
+    name = " ".join(value.strip().split())
+    if not name:
+        raise ValueError("Name is required.")
+    return " ".join(word[:1].upper() + word[1:].lower() for word in name.split(" "))
 
 
 def validate_redirect_url(
@@ -237,11 +273,15 @@ def verify_pkce(code_verifier: str, code_challenge: str) -> bool:
     return hmac.compare_digest(expected, code_challenge)
 
 
-def get_or_create_public_user(auth_store: AuthStore, email: str) -> AuthUser:
+def get_or_create_public_user(
+    auth_store: AuthStore,
+    email: str,
+    name: str | None = None,
+) -> AuthUser:
     existing_user = auth_store.get_user_by_email(email)
     if existing_user:
         return existing_user
-    return auth_store.create_user(email=email)
+    return auth_store.create_user(email=email, name=name, email_verified=True)
 
 
 def send_auth_email(
@@ -301,18 +341,79 @@ def redirect_with_code(redirect_url: str, authorization_code: str) -> RedirectRe
 
 
 @router.post("/register")
-def register(
+@router.post("/register/start")
+def start_register(
     payload: RegisterRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
+    setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    email_sender: Annotated[AuthEmailSender, Depends(get_auth_email_sender)],
+) -> SendStartResponse:
+    dashboard_settings = setup_store.get_dashboard_settings()
+    require_method(dashboard_settings.password_login_enabled, "Password registration")
+    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+
+    if auth_store.get_user_by_email(payload.email):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists.",
+        )
+
+    otp = f"{secrets.randbelow(1_000_000):06d}"
+    auth_store.create_pending_registration(
+        email=payload.email,
+        name=payload.name,
+        password=payload.password,
+        redirect_url=payload.redirect_url,
+        code_challenge=payload.code_challenge,
+        otp=otp,
+        expires_at=int(time.time()) + settings.public_otp_ttl_seconds,
+    )
+    send_auth_email(
+        email_sender=email_sender,
+        settings=settings,
+        dashboard_settings=dashboard_settings,
+        template_key="otp",
+        to_email=payload.email,
+        values={"code": otp},
+    )
+    return SendStartResponse(sent=True, dev_otp=otp if settings.app_env != "production" else None)
+
+
+@router.post("/register/verify")
+def verify_register(
+    payload: RegisterVerifyRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_login_enabled, "Password registration")
-    validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+
+    pending_registration = auth_store.consume_pending_registration(
+        email=payload.email,
+        otp=payload.otp,
+        now=int(time.time()),
+    )
+    if not pending_registration:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired registration code.",
+        )
+
+    validate_redirect_url(
+        dashboard_settings,
+        pending_registration.redirect_url,
+        app_env=settings.app_env,
+    )
 
     try:
-        user = auth_store.create_user(email=payload.email, password=payload.password)
+        user = auth_store.create_user(
+            email=pending_registration.email,
+            name=pending_registration.name,
+            password_hash=pending_registration.password_hash,
+            email_verified=True,
+        )
     except AuthUserAlreadyExistsError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -323,8 +424,8 @@ def register(
         auth_store=auth_store,
         settings=settings,
         user=user,
-        redirect_url=payload.redirect_url,
-        code_challenge=payload.code_challenge,
+        redirect_url=pending_registration.redirect_url,
+        code_challenge=pending_registration.code_challenge,
     )
 
 
@@ -605,7 +706,12 @@ def complete_google_oauth(
             detail="Google did not return an email address.",
         )
 
-    user = get_or_create_public_user(auth_store, email)
+    google_name = str(profile.get("name") or "").strip()
+    user = get_or_create_public_user(
+        auth_store,
+        email,
+        name=normalize_display_name(google_name) if google_name else None,
+    )
     auth_code = issue_auth_code(
         auth_store=auth_store,
         settings=settings,
