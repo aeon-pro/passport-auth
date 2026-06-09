@@ -1,4 +1,5 @@
 import json
+import urllib.error
 import urllib.request
 from typing import Protocol
 
@@ -54,9 +55,37 @@ class ResendEmailSender:
         try:
             with urllib.request.urlopen(request, timeout=10) as response:
                 if response.status >= 400:
-                    raise EmailDeliveryError("Resend rejected the auth email.")
+                    raise EmailDeliveryError(
+                        f"Resend rejected the auth email: HTTP {response.status}."
+                    )
+        except urllib.error.HTTPError as exc:
+            raise EmailDeliveryError(
+                f"Resend rejected the auth email: {_resend_error_detail(exc)}"
+            ) from exc
         except OSError as exc:
             raise EmailDeliveryError("Resend could not deliver the auth email.") from exc
+
+
+def _resend_error_detail(error: urllib.error.HTTPError) -> str:
+    try:
+        body = error.read().decode("utf-8", errors="replace").strip()
+    except OSError:
+        body = ""
+
+    if body:
+        try:
+            parsed = json.loads(body)
+        except json.JSONDecodeError:
+            return body[:240]
+
+        if isinstance(parsed, dict):
+            for key in ("message", "error", "detail"):
+                value = parsed.get(key)
+                if value:
+                    return str(value)[:240]
+        return body[:240]
+
+    return f"HTTP {error.code} {error.reason}".strip()
 
 
 def _template_for_key(settings: DashboardSettings, key: str) -> EmailTemplate:
