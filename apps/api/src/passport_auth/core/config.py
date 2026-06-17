@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_env: str = "development"
     app_encryption_key: str = "local-development-secret-change-me"
+    clickhouse_url: str | None = None
     database_url: str | None = None
     dashboard_jwt_ttl_seconds: int = 31_536_000
     public_access_token_ttl_seconds: int = 900

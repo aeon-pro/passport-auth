@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
+from passport_auth.analytics import PublicAuthAnalyticsEvent, should_record_public_auth_analytics
 from passport_auth.auth.email import AuthEmailSender, EmailDeliveryError
 from passport_auth.auth.google import GoogleOAuthClient, GoogleOAuthError
 from passport_auth.auth.store import AuthStore, AuthUser, AuthUserAlreadyExistsError
@@ -182,6 +183,46 @@ def get_auth_email_sender(request: Request) -> AuthEmailSender:
 
 def get_google_oauth_client(request: Request) -> GoogleOAuthClient:
     return request.app.state.google_oauth_client
+
+
+def request_origin(request: Request) -> str:
+    return request.headers.get("Origin") or request.headers.get("Referer") or ""
+
+
+def track_public_auth_event(
+    *,
+    request: Request,
+    settings: Settings,
+    event_type: str,
+    auth_method: str = "",
+    status_value: str = "success",
+    user: AuthUser | None = None,
+    email: str = "",
+    redirect_url: str = "",
+    reason: str = "",
+    properties: dict[str, Any] | None = None,
+) -> None:
+    origin = request_origin(request)
+    if not should_record_public_auth_analytics(
+        settings,
+        redirect_url=redirect_url,
+        origin=origin,
+    ):
+        return
+
+    request.app.state.analytics_sink.record_public_auth_event(
+        PublicAuthAnalyticsEvent(
+            event_type=event_type,
+            auth_method=auth_method,
+            status=status_value,
+            user_id=user.id if user else "",
+            email=(user.email if user else email).strip().lower(),
+            redirect_url=redirect_url,
+            origin=origin,
+            reason=reason,
+            properties=properties or {},
+        )
+    )
 
 
 def public_user_response(user: AuthUser) -> PublicUserResponse:
@@ -446,6 +487,7 @@ def validate_auth_request(
 @router.post("/register")
 @router.post("/register/start")
 def start_register(
+    request: Request,
     payload: RegisterRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -480,11 +522,20 @@ def start_register(
         to_email=payload.email,
         values={"code": otp},
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="registration_started",
+        auth_method="password",
+        email=payload.email,
+        redirect_url=payload.redirect_url,
+    )
     return SendStartResponse(sent=True, dev_otp=otp if settings.app_env != "production" else None)
 
 
 @router.post("/register/verify")
 def verify_register(
+    request: Request,
     payload: RegisterVerifyRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -523,7 +574,7 @@ def verify_register(
             detail="A user with this email already exists.",
         ) from exc
 
-    return issue_auth_code(
+    auth_code = issue_auth_code(
         auth_store=auth_store,
         settings=settings,
         user=user,
@@ -531,10 +582,20 @@ def verify_register(
         redirect_url=pending_registration.redirect_url,
         code_challenge=pending_registration.code_challenge,
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="registration_completed",
+        auth_method="password",
+        user=user,
+        redirect_url=pending_registration.redirect_url,
+    )
+    return auth_code
 
 
 @router.post("/password/login")
 def password_login(
+    request: Request,
     payload: PasswordLoginRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -550,13 +611,23 @@ def password_login(
         or not user.password_hash
         or not verify_password(payload.password, user.password_hash)
     ):
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="login_failure",
+            auth_method="password",
+            status_value="failure",
+            email=payload.email,
+            redirect_url=payload.redirect_url,
+            reason="invalid_credentials",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
         )
 
     require_active_user(user)
-    return issue_auth_code(
+    auth_code = issue_auth_code(
         auth_store=auth_store,
         settings=settings,
         user=user,
@@ -564,10 +635,20 @@ def password_login(
         redirect_url=payload.redirect_url,
         code_challenge=payload.code_challenge,
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="login_success",
+        auth_method="password",
+        user=user,
+        redirect_url=payload.redirect_url,
+    )
+    return auth_code
 
 
 @router.post("/otp/start")
 def start_otp(
+    request: Request,
     payload: AuthCodeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -593,11 +674,20 @@ def start_otp(
         to_email=payload.email,
         values={"code": otp},
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="otp_sent",
+        auth_method="otp",
+        email=payload.email,
+        redirect_url=payload.redirect_url,
+    )
     return SendStartResponse(sent=True, dev_otp=otp if settings.app_env != "production" else None)
 
 
 @router.post("/otp/verify")
 def verify_otp(
+    request: Request,
     payload: OtpVerifyRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -613,6 +703,16 @@ def verify_otp(
         purpose="login",
         now=int(time.time()),
     ):
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="login_failure",
+            auth_method="otp",
+            status_value="failure",
+            email=payload.email,
+            redirect_url=payload.redirect_url,
+            reason="invalid_otp",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OTP.",
@@ -620,7 +720,7 @@ def verify_otp(
 
     user = get_or_create_public_user(auth_store, payload.email)
     require_active_user(user)
-    return issue_auth_code(
+    auth_code = issue_auth_code(
         auth_store=auth_store,
         settings=settings,
         user=user,
@@ -628,10 +728,20 @@ def verify_otp(
         redirect_url=payload.redirect_url,
         code_challenge=payload.code_challenge,
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="login_success",
+        auth_method="otp",
+        user=user,
+        redirect_url=payload.redirect_url,
+    )
+    return auth_code
 
 
 @router.post("/magic-link/start")
 def start_magic_link(
+    request: Request,
     payload: AuthCodeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -658,6 +768,14 @@ def start_magic_link(
         to_email=payload.email,
         values={"magic_link": magic_link_url(token, dashboard_settings)},
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="magic_link_sent",
+        auth_method="magic_link",
+        email=payload.email,
+        redirect_url=payload.redirect_url,
+    )
     return SendStartResponse(
         sent=True,
         dev_token=token if settings.app_env != "production" else None,
@@ -667,6 +785,7 @@ def start_magic_link(
 
 @router.post("/magic-link/consume")
 def consume_magic_link(
+    request: Request,
     payload: MagicLinkConsumeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -677,6 +796,14 @@ def consume_magic_link(
 
     magic_link = auth_store.consume_magic_link(token=payload.token, now=int(time.time()))
     if not magic_link:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="login_failure",
+            auth_method="magic_link",
+            status_value="failure",
+            reason="invalid_magic_link",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired magic link.",
@@ -685,7 +812,7 @@ def consume_magic_link(
     validate_redirect_url(dashboard_settings, magic_link.redirect_url, app_env=settings.app_env)
     user = get_or_create_public_user(auth_store, magic_link.email)
     require_active_user(user)
-    return issue_auth_code(
+    auth_code = issue_auth_code(
         auth_store=auth_store,
         settings=settings,
         user=user,
@@ -693,10 +820,20 @@ def consume_magic_link(
         redirect_url=magic_link.redirect_url,
         code_challenge=magic_link.code_challenge,
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="login_success",
+        auth_method="magic_link",
+        user=user,
+        redirect_url=magic_link.redirect_url,
+    )
+    return auth_code
 
 
 @router.post("/password-reset/start")
 def start_password_reset(
+    request: Request,
     payload: PasswordResetStartRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
@@ -708,6 +845,15 @@ def start_password_reset(
 
     user = auth_store.get_user_by_email(payload.email)
     if not user:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="password_reset_started",
+            auth_method="password_reset",
+            email=payload.email,
+            status_value="accepted",
+            reason="unknown_email",
+        )
         return SendStartResponse(sent=True)
 
     otp = f"{secrets.randbelow(1_000_000):06d}"
@@ -725,12 +871,21 @@ def start_password_reset(
         to_email=user.email,
         values={"code": otp},
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="password_reset_started",
+        auth_method="password_reset",
+        user=user,
+    )
     return SendStartResponse(sent=True, dev_otp=otp if settings.app_env != "production" else None)
 
 
 @router.post("/password-reset/confirm")
 def confirm_password_reset(
+    request: Request,
     payload: PasswordResetConfirmRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
 ) -> OkResponse:
     if not auth_store.consume_otp(
@@ -739,17 +894,34 @@ def confirm_password_reset(
         purpose="password_reset",
         now=int(time.time()),
     ):
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="password_reset_failed",
+            auth_method="password_reset",
+            email=payload.email,
+            status_value="failure",
+            reason="invalid_otp",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired reset code.",
         )
 
     auth_store.update_user_password(email=payload.email, password=payload.password)
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="password_reset_completed",
+        auth_method="password_reset",
+        email=payload.email,
+    )
     return OkResponse(ok=True)
 
 
 @router.get("/google/start")
 def start_google_oauth(
+    request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
@@ -773,6 +945,13 @@ def start_google_oauth(
         code_challenge=code_challenge,
         expires_at=int(time.time()) + settings.public_oauth_state_ttl_seconds,
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="google_oauth_started",
+        auth_method="google",
+        redirect_url=redirect_url,
+    )
     return GoogleStartResponse(
         authorization_url=google_client.authorization_url(
             state=state,
@@ -783,6 +962,7 @@ def start_google_oauth(
 
 @router.get("/google/callback")
 def complete_google_oauth(
+    request: Request,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
@@ -795,6 +975,14 @@ def complete_google_oauth(
     require_method(dashboard_settings.google_oauth_enabled, "Google OAuth")
     oauth_state = auth_store.consume_oauth_state(state=state, now=int(time.time()))
     if not oauth_state:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="login_failure",
+            auth_method="google",
+            status_value="failure",
+            reason="invalid_oauth_state",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired OAuth state.",
@@ -804,6 +992,15 @@ def complete_google_oauth(
     try:
         profile = google_client.exchange_code(code=code, settings=dashboard_settings)
     except GoogleOAuthError as exc:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="login_failure",
+            auth_method="google",
+            status_value="failure",
+            redirect_url=oauth_state.redirect_url,
+            reason="provider_error",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
@@ -811,6 +1008,15 @@ def complete_google_oauth(
 
     email = str(profile.get("email") or "").strip().lower()
     if not email:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="login_failure",
+            auth_method="google",
+            status_value="failure",
+            redirect_url=oauth_state.redirect_url,
+            reason="missing_email",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Google did not return an email address.",
@@ -831,6 +1037,14 @@ def complete_google_oauth(
         redirect_url=oauth_state.redirect_url,
         code_challenge=oauth_state.code_challenge,
     )
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="login_success",
+        auth_method="google",
+        user=user,
+        redirect_url=oauth_state.redirect_url,
+    )
     if response == "json":
         return auth_code
     return redirect_with_code(auth_code.redirect_url, auth_code.authorization_code)
@@ -838,12 +1052,20 @@ def complete_google_oauth(
 
 @router.post("/token")
 def exchange_token(
+    request: Request,
     payload: TokenExchangeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
 ) -> TokenResponse:
     auth_code = auth_store.consume_auth_code(code=payload.code, now=int(time.time()))
     if not auth_code or not verify_pkce(payload.code_verifier, auth_code.code_challenge):
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="token_exchange_failure",
+            status_value="failure",
+            reason="invalid_code_or_pkce",
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired authorization code.",
@@ -851,17 +1073,34 @@ def exchange_token(
 
     user = auth_store.get_user_by_id(auth_code.user_id)
     if not user:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="token_exchange_failure",
+            status_value="failure",
+            redirect_url=auth_code.redirect_url,
+            reason="missing_user",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not active.",
         )
     require_active_user(user)
 
-    return issue_token_pair(auth_store=auth_store, settings=settings, user=user)
+    token_pair = issue_token_pair(auth_store=auth_store, settings=settings, user=user)
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="token_exchange",
+        user=user,
+        redirect_url=auth_code.redirect_url,
+    )
+    return token_pair
 
 
 @router.post("/refresh")
 def refresh(
+    request: Request,
     payload: RefreshRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
@@ -871,6 +1110,13 @@ def refresh(
         now=int(time.time()),
     )
     if not refresh_token:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="token_refresh_failure",
+            status_value="failure",
+            reason="invalid_refresh_token",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token.",
@@ -878,21 +1124,42 @@ def refresh(
 
     user = auth_store.get_user_by_id(refresh_token.user_id)
     if not user:
+        track_public_auth_event(
+            request=request,
+            settings=settings,
+            event_type="token_refresh_failure",
+            status_value="failure",
+            reason="missing_user",
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User is not active.",
         )
     require_active_user(user)
 
-    return issue_token_pair(auth_store=auth_store, settings=settings, user=user)
+    token_pair = issue_token_pair(auth_store=auth_store, settings=settings, user=user)
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="token_refresh",
+        user=user,
+    )
+    return token_pair
 
 
 @router.post("/logout")
 def logout(
+    request: Request,
     payload: LogoutRequest,
+    settings: Annotated[Settings, Depends(get_settings)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
 ) -> OkResponse:
     auth_store.revoke_refresh_token(token=payload.refresh_token)
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="logout",
+    )
     return OkResponse(ok=True)
 
 
@@ -920,4 +1187,10 @@ def me(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
     require_active_user(user)
 
+    track_public_auth_event(
+        request=request,
+        settings=settings,
+        event_type="active_user",
+        user=user,
+    )
     return public_user_response(user)

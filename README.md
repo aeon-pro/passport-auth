@@ -89,6 +89,11 @@ localhost callbacks and browser origins such as `http://localhost:5173` and
 `http://127.0.0.1:3000`. Production only allows origins and redirect URLs saved in the
 dashboard settings.
 
+Public auth analytics are production-only. In production, events are written to ClickHouse when
+`CLICKHOUSE_URL` is configured. There is no Postgres analytics fallback, and analytics are skipped
+for local or insecure URLs such as `http://localhost:*`, `http://127.0.0.1:*`, and other
+non-HTTPS origins.
+
 ### Coolify
 
 Use `docker-compose.yaml` as the Docker Compose file. It deploys the web service, Postgres,
