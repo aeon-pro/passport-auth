@@ -82,6 +82,8 @@ def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
     assert "profile-menu" in app_js
     assert "profile-dropdown" in styles_css
     assert ".profile-summary > span:last-child" in styles_css
+    assert 'brandMarkup(true, { showFallbackMark: false })' in app_js
+    assert ".brand.text-only" in styles_css
 
 
 def test_dashboard_uses_uploaded_logos_across_brand_surfaces() -> None:

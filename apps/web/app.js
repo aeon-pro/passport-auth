@@ -896,11 +896,12 @@ function brandInitials(name = currentBrandName()) {
   return (initials || "PA").toUpperCase();
 }
 
-function brandMarkup(compact = false) {
+function brandMarkup(compact = false, { showFallbackMark = true } = {}) {
   const name = currentBrandName();
+  const hasBrandVisual = showFallbackMark || Boolean(currentBrandLogoUrl({ preferMark: compact }));
   return `
-    <a class="brand ${compact ? "compact" : ""}" href="/" data-link>
-      ${brandVisualMarkup(name, { compact })}
+    <a class="brand ${compact ? "compact" : ""} ${hasBrandVisual ? "" : "text-only"}" href="/" data-link>
+      ${brandVisualMarkup(name, { compact, showFallbackMark })}
       <span>
         <h1>${escapeHtml(name)}</h1>
       </span>
@@ -908,10 +909,13 @@ function brandMarkup(compact = false) {
   `;
 }
 
-function brandVisualMarkup(name = currentBrandName(), { compact = false } = {}) {
+function brandVisualMarkup(name = currentBrandName(), { compact = false, showFallbackMark = true } = {}) {
   const logoUrl = currentBrandLogoUrl({ preferMark: compact });
   if (logoUrl) {
     return `<img class="brand-logo" src="${escapeHtml(logoUrl)}" alt="" />`;
+  }
+  if (!showFallbackMark) {
+    return "";
   }
   return `<span class="brand-mark" aria-hidden="true">${escapeHtml(brandInitials(name))}</span>`;
 }
@@ -947,7 +951,7 @@ function renderAppShell(content) {
   app.className = "app-shell obsidian-grid";
   app.innerHTML = `
     <aside class="shell-rail sidebar" aria-label="Workspace">
-      ${brandMarkup(true)}
+      ${brandMarkup(true, { showFallbackMark: false })}
       <nav class="nav" aria-label="Primary">
         ${routes
           .map(

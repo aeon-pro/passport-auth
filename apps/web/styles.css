@@ -160,6 +160,10 @@ ul {
   gap: 12px;
 }
 
+.brand.text-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .brand.compact,
 .auth-card {
   width: min(430px, 100%);
