@@ -196,6 +196,8 @@ def test_dashboard_contains_email_templates_page() -> None:
     assert "Password reset OTP" in app_js
     assert "template-preview" in styles_css
     assert "template-tabs" in styles_css
+    assert "template-logo-frame" in app_js
+    assert "template-logo-frame" in styles_css
 
 
 def test_dashboard_contains_users_management_page() -> None:

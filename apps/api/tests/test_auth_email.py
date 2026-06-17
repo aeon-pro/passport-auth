@@ -64,3 +64,31 @@ def test_resend_sender_surfaces_rejection_detail(monkeypatch: pytest.MonkeyPatch
             values={"code": "123456"},
             settings=resend_settings(),
         )
+
+
+def test_resend_email_logo_uses_contrast_tile(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_payload = {}
+
+    def accept_email(request, timeout: int):
+        assert timeout == 10
+        captured_payload.update(json.loads(request.data.decode("utf-8")))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", accept_email)
+
+    ResendEmailSender().send_template(
+        template_key="otp",
+        to_email="user@example.com",
+        values={"code": "123456"},
+        settings=DashboardSettings(
+            resend_from_email="Alactic <auth@mail.alactic.net>",
+            resend_api_key="re_test_key",
+            brand_name="Alactic",
+            logo_url="https://auth.alactic.net/dashboard-assets/logos/white-logo.png",
+        ),
+    )
+
+    html = captured_payload["html"]
+    assert "background:#17171a" in html
+    assert "white-logo.png" in html
+    assert "vertical-align:middle" in html

@@ -1347,9 +1347,21 @@ p {
   font-weight: 560;
 }
 
+.template-logo-frame {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  border-radius: 13px;
+  background: #17171a;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 12px 28px rgba(16, 16, 19, 0.12);
+}
+
 .template-logo-image {
-  width: 42px;
-  max-height: 42px;
+  width: 30px;
+  max-height: 30px;
   object-fit: contain;
 }
 

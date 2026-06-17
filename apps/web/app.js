@@ -1240,7 +1240,11 @@ function renderTemplateCards(templates, brandName, logoUrl = "") {
 
 function renderTemplateLogo(brandName, logoUrl = "") {
   if (logoUrl) {
-    return `<img class="template-logo-image" src="${escapeHtml(logoUrl)}" alt="" />`;
+    return `
+      <span class="template-logo-frame">
+        <img class="template-logo-image" src="${escapeHtml(logoUrl)}" alt="" />
+      </span>
+    `;
   }
   return `<span class="template-logo">${escapeHtml((brandName || "PA").slice(0, 2).toUpperCase())}</span>`;
 }

@@ -197,8 +197,13 @@ def _logo_markup(settings: DashboardSettings) -> str:
     logo_url = settings.logo_url or settings.mark_url
     if logo_url:
         return (
+            '<div style="display:inline-block;width:52px;height:52px;'
+            'line-height:52px;border-radius:14px;background:#17171a;'
+            'text-align:center;box-shadow:0 12px 28px rgba(16,16,19,.12);">'
             f'<img src="{escape_html(logo_url)}" alt="" '
-            'style="width:46px;height:46px;object-fit:contain;border-radius:12px;" />'
+            'style="width:32px;height:32px;max-width:32px;max-height:32px;'
+            'object-fit:contain;vertical-align:middle;border:0;" />'
+            "</div>"
         )
 
     initials = "".join(word[:1] for word in settings.brand_name.split()[:2]).upper() or "PA"
