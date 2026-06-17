@@ -879,7 +879,8 @@ p {
 .settings-route,
 .settings-matrix,
 .templates-route,
-.users-route {
+.users-route,
+.admins-route {
   display: grid;
   max-width: 1120px;
   gap: 22px;
@@ -900,6 +901,24 @@ p {
   padding: 18px;
 }
 
+.admins-table-panel {
+  display: grid;
+  gap: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.026), transparent 130px),
+    rgba(10, 10, 12, 0.86);
+  padding: 18px;
+}
+
+.admin-invite-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px auto;
+  gap: 10px;
+  align-items: end;
+}
+
 .users-search {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -907,7 +926,8 @@ p {
   align-items: end;
 }
 
-.users-table {
+.users-table,
+.admins-table {
   display: grid;
   overflow-x: auto;
 }
@@ -920,7 +940,25 @@ p {
   min-width: 940px;
 }
 
+.admins-table-head,
+.admin-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) 130px 130px;
+  align-items: center;
+  min-width: 540px;
+}
+
 .users-table-head {
+  gap: 12px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  font-weight: 620;
+  padding: 0 10px 10px;
+  text-transform: uppercase;
+}
+
+.admins-table-head {
   gap: 12px;
   border-bottom: 1px solid var(--line-soft);
   color: var(--ink-muted);
@@ -934,7 +972,8 @@ p {
   display: contents;
 }
 
-.user-row {
+.user-row,
+.admin-row {
   gap: 8px;
   min-height: 76px;
   border: 1px solid transparent;
@@ -945,7 +984,9 @@ p {
 }
 
 .user-row:hover,
-.user-row:focus-within {
+.user-row:focus-within,
+.admin-row:hover,
+.admin-row:focus-within {
   border-color: var(--line-soft);
   background: rgba(255, 255, 255, 0.022);
 }
@@ -1177,6 +1218,10 @@ p {
 
 .danger-action {
   color: #ffb4b4;
+}
+
+.admin-invite-shell .auth-card {
+  width: min(520px, 100%);
 }
 
 .settings-intro {

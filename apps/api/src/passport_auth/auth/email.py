@@ -124,7 +124,7 @@ def _render_email_html(
     footer = _render_template_text(template.footer_text, settings=settings, values=values)
     support_label = _render_template_text(template.support_label, settings=settings, values=values)
     support_url = _render_template_text(template.support_url, settings=settings, values=values)
-    action_url = values.get("magic_link") or support_url
+    action_url = values.get("magic_link") or values.get("invite_link") or support_url
     logo_markup = _logo_markup(settings)
     body_style = (
         "margin:0;background:#f6f6f4;color:#111;"

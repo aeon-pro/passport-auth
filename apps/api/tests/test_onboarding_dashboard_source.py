@@ -226,6 +226,23 @@ def test_dashboard_contains_users_management_page() -> None:
     assert "user-edit-dialog" in styles_css
 
 
+def test_dashboard_contains_admin_invite_management_page() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert '{ href: "/admins", label: "Admins" }' in app_js
+    assert "renderAdmins" in app_js
+    assert "/api/v1/dashboard/admins/invite" in app_js
+    assert 'data-form="admin-invite"' in app_js
+    assert "handleAdminInvite" in app_js
+    assert "/admin-invite" in app_js
+    assert "renderAdminInviteAccept" in app_js
+    assert "/api/v1/dashboard/admins/accept" in app_js
+    assert "dashboard_invite" in app_js
+    assert "admins-table-panel" in styles_css
+    assert "admin-invite-shell" in styles_css
+
+
 def test_dashboard_uses_operational_overview_after_setup() -> None:
     app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")

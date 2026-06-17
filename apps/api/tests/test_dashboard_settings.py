@@ -10,6 +10,21 @@ from passport_auth.setup.store import (
     dashboard_settings_to_storage_dict,
 )
 
+DASHBOARD_INVITE_TEMPLATE = {
+    "key": "dashboard_invite",
+    "name": "Admin invite",
+    "subject": "Set up your {{brand_name}} admin access",
+    "headline": "You have been invited",
+    "body": "Use the secure link below to set your dashboard password. The link expires soon.",
+    "button_label": "Set admin password",
+    "accent_color": "#f5f5f7",
+    "footer_text": (
+        "If you did not request this dashboard invite, you can safely ignore this email."
+    ),
+    "support_label": "Contact support",
+    "support_url": "mailto:support@example.com",
+}
+
 
 async def login_owner(client: AsyncClient) -> str:
     response = await client.post(
@@ -120,6 +135,7 @@ async def test_dashboard_settings_return_defaults() -> None:
                 "support_label": "Contact support",
                 "support_url": "mailto:support@example.com",
             },
+            DASHBOARD_INVITE_TEMPLATE,
         ],
     }
 
@@ -265,6 +281,7 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
                 "support_label": "Contact support",
                 "support_url": "mailto:support@example.com",
             },
+            DASHBOARD_INVITE_TEMPLATE,
         ],
     }
     assert "re_secret_key" not in read_response.text
@@ -316,6 +333,7 @@ async def test_dashboard_settings_save_email_templates() -> None:
         {**templates[0], "accent_color": "#c7b7ff"},
         {**templates[1], "accent_color": "#7cffaa"},
         {**templates[2], "accent_color": "#f5f5f7"},
+        DASHBOARD_INVITE_TEMPLATE,
     ]
 
     async with AsyncClient(transport=transport, base_url="http://testserver") as client:

@@ -97,8 +97,8 @@ def get_current_dashboard_user(
             detail="Not authenticated.",
         ) from exc
 
-    owner = setup_store.get_owner_by_email(str(payload["sub"]))
-    if not owner or owner.role != payload["role"]:
+    owner = setup_store.get_dashboard_user_by_email(str(payload["sub"]))
+    if not owner or not owner.accepted_at or owner.role != payload["role"]:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
 
     return owner
@@ -110,8 +110,12 @@ def login(
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> LoginResponse:
-    owner = setup_store.get_owner_by_email(payload.email)
-    if not owner or not verify_password(payload.password, owner.password_hash):
+    owner = setup_store.get_dashboard_user_by_email(payload.email)
+    if (
+        not owner
+        or not owner.accepted_at
+        or not verify_password(payload.password, owner.password_hash)
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
@@ -143,7 +147,7 @@ def start_password_reset(
             detail="Password reset is disabled.",
         )
 
-    owner = setup_store.get_owner_by_email(payload.email)
+    owner = setup_store.get_dashboard_user_by_email(payload.email)
     if not owner:
         return PasswordResetStartResponse(sent=True)
 
@@ -165,7 +169,7 @@ def confirm_password_reset(
     payload: PasswordResetConfirmRequest,
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> OkResponse:
-    owner = setup_store.get_owner_by_email(payload.email)
+    owner = setup_store.get_dashboard_user_by_email(payload.email)
     if not owner:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -183,7 +187,7 @@ def confirm_password_reset(
             detail="Invalid or expired reset code.",
         )
 
-    setup_store.update_owner_password(email=owner.email, password=payload.password)
+    setup_store.update_dashboard_user_password(email=owner.email, password=payload.password)
     return OkResponse(ok=True)
 
 

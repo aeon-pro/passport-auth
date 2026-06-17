@@ -14,6 +14,7 @@ const templateSaveLabels = {
   magic_link: "Save Magic link",
   otp: "Save One-time passcode",
   password_reset: "Save Password reset OTP",
+  dashboard_invite: "Save Admin invite",
 };
 
 const defaultEmailTemplates = [
@@ -51,6 +52,18 @@ const defaultEmailTemplates = [
     button_label: "Reset password",
     accent_color: defaultTemplateColor,
     footer_text: "If you did not request this password reset, contact support immediately.",
+    support_label: "Contact support",
+    support_url: "mailto:support@example.com",
+  },
+  {
+    key: "dashboard_invite",
+    name: "Admin invite",
+    subject: "Set up your {{brand_name}} admin access",
+    headline: "You have been invited",
+    body: "Use the secure link below to set your dashboard password. The link expires soon.",
+    button_label: "Set admin password",
+    accent_color: defaultTemplateColor,
+    footer_text: "If you did not request this dashboard invite, you can safely ignore this email.",
     support_label: "Contact support",
     support_url: "mailto:support@example.com",
   },
@@ -92,6 +105,12 @@ const state = {
   usersLoading: false,
   selectedUserId: "",
   editingUserId: "",
+  admins: [],
+  adminsTotal: 0,
+  adminsLoaded: false,
+  adminsLoading: false,
+  adminInviteDevLink: "",
+  adminInviteAccepted: false,
   settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
@@ -124,6 +143,7 @@ const state = {
 const routes = [
   { href: "/", label: "Dashboard" },
   { href: "/users", label: "Users" },
+  { href: "/admins", label: "Admins" },
   { href: "/settings", label: "Settings" },
   { href: "/templates", label: "Templates" },
   { href: "/analytics", label: "Analytics" },
@@ -394,7 +414,8 @@ function sampleTemplateText(value, brandName = "Passport Auth") {
   return String(value || "")
     .replaceAll("{{brand_name}}", brandName || "Passport Auth")
     .replaceAll("{{code}}", "482913")
-    .replaceAll("{{magic_link}}", "https://auth.example.com/magic/secure-token");
+    .replaceAll("{{magic_link}}", "https://auth.example.com/magic/secure-token")
+    .replaceAll("{{invite_link}}", "https://auth.example.com/admin-invite?token=secure-token");
 }
 
 function readEmailTemplatesFromForm(form) {
@@ -547,6 +568,14 @@ function formatAuthMethod(value) {
 
 function formatUserRole(value) {
   return userRoleOptions.find((role) => role.value === value)?.label || "User";
+}
+
+function formatDashboardRole(value) {
+  return value === "owner" ? "Owner" : "Admin";
+}
+
+function formatInviteStatus(value) {
+  return value === "accepted" ? "Accepted" : "Pending";
 }
 
 function renderRoleSelect(selectedRole) {
@@ -707,6 +736,33 @@ async function loadUsers({ query = state.usersQuery, quiet = false } = {}) {
     }
   } finally {
     state.usersLoading = false;
+    if (!quiet) {
+      render();
+    }
+  }
+}
+
+async function loadAdmins({ quiet = false } = {}) {
+  if (!state.token || state.adminsLoading) {
+    return;
+  }
+
+  state.adminsLoading = true;
+  if (!quiet) {
+    render();
+  }
+
+  try {
+    const response = await api("/api/v1/dashboard/admins");
+    state.admins = response.admins || [];
+    state.adminsTotal = response.total || state.admins.length;
+    state.adminsLoaded = true;
+  } catch (error) {
+    if (!quiet) {
+      state.error = error.message;
+    }
+  } finally {
+    state.adminsLoading = false;
     if (!quiet) {
       render();
     }
@@ -1375,8 +1431,8 @@ function renderAuth() {
         <h2>${login ? "Sign in" : "Reset password"}</h2>
         <p>${
           login
-            ? "Use the owner email and password created during onboarding."
-            : "Reset access with a one-time code sent to the owner email."
+            ? "Use a dashboard account email and password."
+            : "Reset access with a one-time code sent to your dashboard email."
         }</p>
       </div>
 
@@ -1449,6 +1505,58 @@ function renderAuth() {
             </form>
           `
           : ""
+      }
+    </section>
+  `;
+}
+
+function adminInviteToken() {
+  const params = new URLSearchParams(window.location.search);
+  return params.get("token") || "";
+}
+
+function renderAdminInviteAccept() {
+  const token = adminInviteToken();
+  app.className = "admin-invite-shell auth-screen";
+  app.innerHTML = `
+    ${brandMarkup(true)}
+    <section class="auth-card admin-invite-card" aria-label="Set dashboard password">
+      <div class="page-heading compact-heading">
+        <h2>${state.adminInviteAccepted ? "Password set" : "Set admin password"}</h2>
+        <p>${
+          state.adminInviteAccepted
+            ? "Your dashboard account is ready. Sign in with the password you just created."
+            : "Create the password for your Passport Auth dashboard account."
+        }</p>
+      </div>
+      ${
+        state.adminInviteAccepted
+          ? `
+            ${renderMessage()}
+            <div class="form-actions">
+              <a class="primary-action" href="/" data-link>Go to sign in</a>
+            </div>
+          `
+          : `
+            <form class="form-grid" data-form="admin-invite-accept">
+              <input name="token" type="hidden" value="${escapeHtml(token)}" />
+              <label class="field">
+                <span>Password</span>
+                <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" required />
+              </label>
+              <label class="field">
+                <span>Confirm password</span>
+                <input name="confirm_password" type="password" autocomplete="new-password" placeholder="Repeat password" required />
+              </label>
+              ${renderError()}
+              ${renderMessage()}
+              <div class="form-actions">
+                <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+                  ${state.busy ? "Saving..." : "Set password"}
+                </button>
+              </div>
+            </form>
+          `
       }
     </section>
   `;
@@ -2086,6 +2194,94 @@ function renderUserEditDialog() {
   `;
 }
 
+function renderAdmins() {
+  if (!state.adminsLoaded && !state.adminsLoading) {
+    void loadAdmins();
+  }
+
+  renderAppShell(`
+    <div class="admins-route">
+      <header class="settings-intro">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Dashboard</span>
+          <h2>Admins</h2>
+          <p>Invite operators who can sign into this Passport Auth dashboard. Invited admins receive a secure link to set their password.</p>
+        </div>
+        <div class="settings-state">
+          <span class="eyebrow">Admin access</span>
+          <strong>${escapeHtml(String(state.adminsTotal))} accounts</strong>
+          <small>${state.adminsLoading ? "Refreshing admins" : "Dashboard operators"}</small>
+        </div>
+      </header>
+
+      <section class="admins-table-panel" aria-label="Dashboard admin users">
+        <form class="admin-invite-form" data-form="admin-invite">
+          <label class="field">
+            <span>Invite email</span>
+            <input name="email" type="email" placeholder="admin@example.com" required />
+          </label>
+          <label class="field">
+            <span>Role</span>
+            <select name="role">
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+          <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+            ${state.busy ? "Sending..." : "Send invite"}
+          </button>
+        </form>
+        ${
+          state.adminInviteDevLink
+            ? `<p class="dev-otp">Development invite link: ${escapeHtml(state.adminInviteDevLink)}</p>`
+            : ""
+        }
+        <div class="admins-table" role="table" aria-label="Dashboard admins">
+          <div class="admins-table-head" role="row">
+            <span>Account</span>
+            <span>Role</span>
+            <span>Status</span>
+          </div>
+          ${renderAdminRows()}
+        </div>
+      </section>
+
+      ${renderError()}
+      ${renderMessage()}
+    </div>
+  `);
+}
+
+function renderAdminRows() {
+  if (state.adminsLoading && !state.admins.length) {
+    return `<p class="form-message">Loading admins.</p>`;
+  }
+  if (!state.admins.length) {
+    return `<p class="form-message">No dashboard admins found.</p>`;
+  }
+
+  return state.admins
+    .map(
+      (admin) => `
+        <div class="admin-row" role="row">
+          <span class="user-identity-cell" role="cell">
+            <span class="profile-avatar" aria-hidden="true">${escapeHtml(
+              admin.email.slice(0, 2).toUpperCase(),
+            )}</span>
+            <span class="user-row-main">
+              <strong>${escapeHtml(admin.email)}</strong>
+              <small>Dashboard sign-in</small>
+            </span>
+          </span>
+          <span class="role-chip" role="cell">${escapeHtml(formatDashboardRole(admin.role))}</span>
+          <span class="status-chip ${admin.invite_status === "accepted" ? "active" : "inactive"}" role="cell">
+            ${escapeHtml(formatInviteStatus(admin.invite_status))}
+          </span>
+        </div>
+      `,
+    )
+    .join("");
+}
+
 function renderSettings() {
   if (!state.settings && !state.settingsLoading) {
     void loadSettings();
@@ -2308,7 +2504,7 @@ function renderTemplates() {
         <div class="settings-state">
           <span class="eyebrow">Saved set</span>
           <strong>${escapeHtml(templates.length)} templates</strong>
-          <small>Placeholders: {{brand_name}}, {{code}}, {{magic_link}}</small>
+          <small>Placeholders: {{brand_name}}, {{code}}, {{magic_link}}, {{invite_link}}</small>
         </div>
       </header>
 
@@ -2373,6 +2569,11 @@ function render() {
   const path = currentPath();
   const done = setupComplete();
 
+  if (path === "/admin-invite") {
+    renderAdminInviteAccept();
+    return;
+  }
+
   if (isHostedAuthPath(path)) {
     renderHostedAuthPage(path);
     return;
@@ -2396,6 +2597,11 @@ function render() {
 
   if (path === "/users") {
     renderUsers();
+    return;
+  }
+
+  if (path === "/admins") {
+    renderAdmins();
     return;
   }
 
@@ -2660,6 +2866,75 @@ async function handleResetConfirm(form) {
     state.authMode = "login";
     state.devOtp = "";
     state.message = "Password updated. Sign in with the new password.";
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleAdminInvite(form) {
+  const formData = new FormData(form);
+  const email = String(formData.get("email") || "").trim();
+  const role = String(formData.get("role") || "admin").trim();
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  state.adminInviteDevLink = "";
+  render();
+
+  try {
+    const invite = await api("/api/v1/dashboard/admins/invite", {
+      method: "POST",
+      body: JSON.stringify({ email, role }),
+    });
+    state.adminInviteDevLink = invite.dev_invite_url || "";
+    state.message = `Invite sent to ${invite.user?.email || email}.`;
+    await loadAdmins({ quiet: true });
+  } catch (error) {
+    state.error = error.message;
+  } finally {
+    state.busy = false;
+    render();
+  }
+}
+
+async function handleAdminInviteAccept(form) {
+  const formData = new FormData(form);
+  const token = String(formData.get("token") || "").trim();
+  const password = String(formData.get("password") || "");
+  const confirmPassword = String(formData.get("confirm_password") || "");
+
+  if (!token) {
+    state.error = "Admin invite token is missing.";
+    render();
+    return;
+  }
+  if (password.length < 12) {
+    state.error = "Password must be at least 12 characters.";
+    render();
+    return;
+  }
+  if (password !== confirmPassword) {
+    state.error = "Passwords do not match.";
+    render();
+    return;
+  }
+
+  state.busy = true;
+  state.error = "";
+  state.message = "";
+  render();
+
+  try {
+    await publicApi("/api/v1/dashboard/admins/accept", {
+      method: "POST",
+      body: JSON.stringify({ token, password }),
+    });
+    state.adminInviteAccepted = true;
+    state.message = "Password set. You can sign in now.";
   } catch (error) {
     state.error = error.message;
   } finally {
@@ -3162,6 +3437,12 @@ app.addEventListener("submit", (event) => {
   if (formName === "reset-confirm") {
     void handleResetConfirm(form);
   }
+  if (formName === "admin-invite") {
+    void handleAdminInvite(form);
+  }
+  if (formName === "admin-invite-accept") {
+    void handleAdminInviteAccept(form);
+  }
   if (formName === "hosted-login") {
     void handleHostedPasswordLogin(form);
   }
@@ -3231,6 +3512,10 @@ app.addEventListener("click", (event) => {
     state.usersLoaded = false;
     state.selectedUserId = "";
     state.editingUserId = "";
+    state.admins = [];
+    state.adminsLoaded = false;
+    state.adminInviteDevLink = "";
+    state.adminInviteAccepted = false;
     state.authMode = "login";
     state.message = "";
     state.error = "";

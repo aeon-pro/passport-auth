@@ -1,4 +1,6 @@
+import hashlib
 import json
+import secrets
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from threading import Lock
@@ -13,11 +15,21 @@ class SetupAlreadyCompleteError(Exception):
     """Raised when an owner account already exists."""
 
 
+class DashboardUserAlreadyExistsError(Exception):
+    """Raised when a dashboard account already exists."""
+
+
 @dataclass(frozen=True)
 class OwnerAccount:
     email: str
     password_hash: str
     role: str = "owner"
+    accepted_at: datetime | None = None
+    invited_at: datetime | None = None
+
+    @property
+    def invite_status(self) -> str:
+        return "accepted" if self.accepted_at else "pending"
 
 
 @dataclass(frozen=True)
@@ -39,6 +51,14 @@ class EmailTemplate:
     footer_text: str
     support_label: str
     support_url: str
+
+
+@dataclass(frozen=True)
+class DashboardInvite:
+    email: str
+    role: str
+    token_hash: str
+    expires_at: int
 
 
 TEMPLATE_COLOR_PRESETS = (
@@ -109,6 +129,20 @@ DEFAULT_EMAIL_TEMPLATES = (
         support_label="Contact support",
         support_url="mailto:support@example.com",
     ),
+    EmailTemplate(
+        key="dashboard_invite",
+        name="Admin invite",
+        subject="Set up your {{brand_name}} admin access",
+        headline="You have been invited",
+        body="Use the secure link below to set your dashboard password. The link expires soon.",
+        button_label="Set admin password",
+        accent_color=DEFAULT_TEMPLATE_COLOR,
+        footer_text=(
+            "If you did not request this dashboard invite, you can safely ignore this email."
+        ),
+        support_label="Contact support",
+        support_url="mailto:support@example.com",
+    ),
 )
 
 
@@ -139,9 +173,32 @@ class SetupStore(Protocol):
 
     def get_owner_by_email(self, email: str) -> OwnerAccount | None: ...
 
+    def get_dashboard_user_by_email(self, email: str) -> OwnerAccount | None: ...
+
+    def list_dashboard_users(self) -> list[OwnerAccount]: ...
+
     def create_owner(self, *, email: str, password: str) -> OwnerAccount: ...
 
     def update_owner_password(self, *, email: str, password: str) -> None: ...
+
+    def update_dashboard_user_password(self, *, email: str, password: str) -> None: ...
+
+    def create_dashboard_invite(
+        self,
+        *,
+        email: str,
+        role: str,
+        token: str,
+        expires_at: int,
+    ) -> OwnerAccount: ...
+
+    def accept_dashboard_invite(
+        self,
+        *,
+        token: str,
+        password: str,
+        now: int,
+    ) -> OwnerAccount | None: ...
 
     def create_password_reset_otp(self, *, email: str, otp: str, expires_at: int) -> None: ...
 
@@ -155,6 +212,8 @@ class SetupStore(Protocol):
 class InMemorySetupStore:
     def __init__(self) -> None:
         self.owner: OwnerAccount | None = None
+        self.dashboard_users_by_email: dict[str, OwnerAccount] = {}
+        self.dashboard_invites: dict[str, DashboardInvite] = {}
         self.password_reset_otps: dict[str, PasswordResetOtp] = {}
         self.dashboard_settings = DashboardSettings()
 
@@ -166,11 +225,26 @@ class InMemorySetupStore:
             return self.owner
         return None
 
+    def get_dashboard_user_by_email(self, email: str) -> OwnerAccount | None:
+        return self.dashboard_users_by_email.get(email.strip().lower())
+
+    def list_dashboard_users(self) -> list[OwnerAccount]:
+        return sorted(
+            self.dashboard_users_by_email.values(),
+            key=lambda user: (user.role != "owner", user.email),
+        )
+
     def create_owner(self, *, email: str, password: str) -> OwnerAccount:
         if self.owner:
             raise SetupAlreadyCompleteError
 
-        self.owner = OwnerAccount(email=email, password_hash=hash_password(password), role="owner")
+        self.owner = OwnerAccount(
+            email=email.strip().lower(),
+            password_hash=hash_password(password),
+            role="owner",
+            accepted_at=datetime.now(UTC),
+        )
+        self.dashboard_users_by_email[self.owner.email] = self.owner
         return self.owner
 
     def update_owner_password(self, *, email: str, password: str) -> None:
@@ -181,7 +255,84 @@ class InMemorySetupStore:
             email=self.owner.email,
             password_hash=hash_password(password),
             role=self.owner.role,
+            accepted_at=self.owner.accepted_at,
+            invited_at=self.owner.invited_at,
         )
+        self.dashboard_users_by_email[self.owner.email] = self.owner
+
+    def update_dashboard_user_password(self, *, email: str, password: str) -> None:
+        user = self.get_dashboard_user_by_email(email)
+        if not user:
+            return
+
+        updated = OwnerAccount(
+            email=user.email,
+            password_hash=hash_password(password),
+            role=user.role,
+            accepted_at=user.accepted_at or datetime.now(UTC),
+            invited_at=user.invited_at,
+        )
+        self.dashboard_users_by_email[user.email] = updated
+        if self.owner and self.owner.email == user.email:
+            self.owner = updated
+
+    def create_dashboard_invite(
+        self,
+        *,
+        email: str,
+        role: str,
+        token: str,
+        expires_at: int,
+    ) -> OwnerAccount:
+        normalized_email = email.strip().lower()
+        existing = self.dashboard_users_by_email.get(normalized_email)
+        if existing and existing.accepted_at:
+            raise DashboardUserAlreadyExistsError
+
+        user = OwnerAccount(
+            email=normalized_email,
+            password_hash=hash_password(secrets.token_urlsafe(48)),
+            role=role,
+            invited_at=datetime.now(UTC),
+        )
+        self.dashboard_users_by_email[normalized_email] = user
+        self.dashboard_invites = {
+            key: invite
+            for key, invite in self.dashboard_invites.items()
+            if invite.email != normalized_email
+        }
+        self.dashboard_invites[hash_dashboard_token(token)] = DashboardInvite(
+            email=normalized_email,
+            role=role,
+            token_hash=hash_dashboard_token(token),
+            expires_at=expires_at,
+        )
+        return user
+
+    def accept_dashboard_invite(
+        self,
+        *,
+        token: str,
+        password: str,
+        now: int,
+    ) -> OwnerAccount | None:
+        invite = self.dashboard_invites.pop(hash_dashboard_token(token), None)
+        if not invite or invite.expires_at < now:
+            return None
+
+        user = self.dashboard_users_by_email.get(invite.email)
+        if not user:
+            return None
+
+        updated = OwnerAccount(
+            email=user.email,
+            password_hash=hash_password(password),
+            role=user.role,
+            accepted_at=datetime.now(UTC),
+            invited_at=user.invited_at,
+        )
+        self.dashboard_users_by_email[user.email] = updated
+        return updated
 
     def create_password_reset_otp(self, *, email: str, otp: str, expires_at: int) -> None:
         self.password_reset_otps[email] = PasswordResetOtp(
@@ -223,7 +374,7 @@ class PostgresSetupStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT email, password_hash, role
+                SELECT email, password_hash, role, accepted_at, invited_at
                 FROM app_users
                 WHERE role = 'owner'
                 ORDER BY created_at ASC
@@ -231,10 +382,7 @@ class PostgresSetupStore:
                 """
             ).fetchone()
 
-        if not row:
-            return None
-
-        return OwnerAccount(email=row[0], password_hash=row[1], role=row[2])
+        return _dashboard_user_from_row(row)
 
     def get_owner_by_email(self, email: str) -> OwnerAccount | None:
         self._ensure_schema()
@@ -242,18 +390,45 @@ class PostgresSetupStore:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT email, password_hash, role
+                SELECT email, password_hash, role, accepted_at, invited_at
                 FROM app_users
                 WHERE email = %s AND role = 'owner'
                 LIMIT 1
                 """,
-                (email,),
+                (email.strip().lower(),),
             ).fetchone()
 
-        if not row:
-            return None
+        return _dashboard_user_from_row(row)
 
-        return OwnerAccount(email=row[0], password_hash=row[1], role=row[2])
+    def get_dashboard_user_by_email(self, email: str) -> OwnerAccount | None:
+        self._ensure_schema()
+
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT email, password_hash, role, accepted_at, invited_at
+                FROM app_users
+                WHERE email = %s
+                LIMIT 1
+                """,
+                (email.strip().lower(),),
+            ).fetchone()
+
+        return _dashboard_user_from_row(row)
+
+    def list_dashboard_users(self) -> list[OwnerAccount]:
+        self._ensure_schema()
+
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT email, password_hash, role, accepted_at, invited_at
+                FROM app_users
+                ORDER BY CASE WHEN role = 'owner' THEN 0 ELSE 1 END, email ASC
+                """
+            ).fetchall()
+
+        return [user for row in rows if (user := _dashboard_user_from_row(row))]
 
     def create_owner(self, *, email: str, password: str) -> OwnerAccount:
         self._ensure_schema()
@@ -261,7 +436,12 @@ class PostgresSetupStore:
         if existing_owner:
             raise SetupAlreadyCompleteError
 
-        owner = OwnerAccount(email=email, password_hash=hash_password(password), role="owner")
+        owner = OwnerAccount(
+            email=email.strip().lower(),
+            password_hash=hash_password(password),
+            role="owner",
+            accepted_at=datetime.now(UTC),
+        )
         user_id = str(uuid4())
 
         try:
@@ -269,8 +449,8 @@ class PostgresSetupStore:
                 with conn.transaction():
                     conn.execute(
                         """
-                        INSERT INTO app_users (id, email, password_hash, role)
-                        VALUES (%s, %s, %s, 'owner')
+                        INSERT INTO app_users (id, email, password_hash, role, accepted_at)
+                        VALUES (%s, %s, %s, 'owner', now())
                         """,
                         (user_id, owner.email, owner.password_hash),
                     )
@@ -294,6 +474,159 @@ class PostgresSetupStore:
                     """,
                     (hash_password(password), email),
                 )
+
+    def update_dashboard_user_password(self, *, email: str, password: str) -> None:
+        self._ensure_schema()
+
+        with self._connect() as conn:
+            with conn.transaction():
+                conn.execute(
+                    """
+                    UPDATE app_users
+                    SET password_hash = %s,
+                        accepted_at = COALESCE(accepted_at, now())
+                    WHERE email = %s
+                    """,
+                    (hash_password(password), email.strip().lower()),
+                )
+
+    def create_dashboard_invite(
+        self,
+        *,
+        email: str,
+        role: str,
+        token: str,
+        expires_at: int,
+    ) -> OwnerAccount:
+        self._ensure_schema()
+        normalized_email = email.strip().lower()
+        expires_at_datetime = datetime.fromtimestamp(expires_at, tz=UTC)
+
+        try:
+            with self._connect() as conn:
+                with conn.transaction():
+                    existing = conn.execute(
+                        """
+                        SELECT accepted_at
+                        FROM app_users
+                        WHERE email = %s
+                        LIMIT 1
+                        """,
+                        (normalized_email,),
+                    ).fetchone()
+                    if existing and existing[0] is not None:
+                        raise DashboardUserAlreadyExistsError
+
+                    if existing:
+                        conn.execute(
+                            """
+                            UPDATE app_users
+                            SET role = %s,
+                                password_hash = %s,
+                                invited_at = COALESCE(invited_at, now())
+                            WHERE email = %s
+                            """,
+                            (
+                                role,
+                                hash_password(secrets.token_urlsafe(48)),
+                                normalized_email,
+                            ),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            INSERT INTO app_users
+                                (id, email, password_hash, role, invited_at)
+                            VALUES (%s, %s, %s, %s, now())
+                            """,
+                            (
+                                str(uuid4()),
+                                normalized_email,
+                                hash_password(secrets.token_urlsafe(48)),
+                                role,
+                            ),
+                        )
+
+                    conn.execute(
+                        """
+                        UPDATE dashboard_invites
+                        SET consumed_at = now()
+                        WHERE email = %s AND consumed_at IS NULL
+                        """,
+                        (normalized_email,),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO dashboard_invites
+                            (id, email, role, token_hash, expires_at)
+                        VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (
+                            str(uuid4()),
+                            normalized_email,
+                            role,
+                            hash_dashboard_token(token),
+                            expires_at_datetime,
+                        ),
+                    )
+        except DashboardUserAlreadyExistsError:
+            raise
+        except Exception as exc:
+            if "app_users_email_key" in str(exc):
+                raise DashboardUserAlreadyExistsError from exc
+            raise
+
+        user = self.get_dashboard_user_by_email(normalized_email)
+        if not user:
+            raise RuntimeError("Dashboard invite user was not created.")
+        return user
+
+    def accept_dashboard_invite(
+        self,
+        *,
+        token: str,
+        password: str,
+        now: int,
+    ) -> OwnerAccount | None:
+        self._ensure_schema()
+        now_datetime = datetime.fromtimestamp(now, tz=UTC)
+
+        with self._connect() as conn:
+            with conn.transaction():
+                invite = conn.execute(
+                    """
+                    SELECT id, email
+                    FROM dashboard_invites
+                    WHERE token_hash = %s
+                      AND consumed_at IS NULL
+                      AND expires_at >= %s
+                    LIMIT 1
+                    """,
+                    (hash_dashboard_token(token), now_datetime),
+                ).fetchone()
+                if not invite:
+                    return None
+
+                row = conn.execute(
+                    """
+                    UPDATE app_users
+                    SET password_hash = %s,
+                        accepted_at = now()
+                    WHERE email = %s
+                    RETURNING email, password_hash, role, accepted_at, invited_at
+                    """,
+                    (hash_password(password), invite[1]),
+                ).fetchone()
+                conn.execute(
+                    """
+                    UPDATE dashboard_invites
+                    SET consumed_at = now()
+                    WHERE id = %s
+                    """,
+                    (invite[0],),
+                )
+
+        return _dashboard_user_from_row(row)
 
     def create_password_reset_otp(self, *, email: str, otp: str, expires_at: int) -> None:
         self._ensure_schema()
@@ -410,6 +743,25 @@ class PostgresSetupStore:
                     )
                     conn.execute(
                         """
+                        ALTER TABLE app_users
+                        ADD COLUMN IF NOT EXISTS accepted_at TIMESTAMPTZ
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE app_users
+                        ADD COLUMN IF NOT EXISTS invited_at TIMESTAMPTZ
+                        """
+                    )
+                    conn.execute(
+                        """
+                        UPDATE app_users
+                        SET accepted_at = created_at
+                        WHERE role = 'owner' AND accepted_at IS NULL
+                        """
+                    )
+                    conn.execute(
+                        """
                         CREATE UNIQUE INDEX IF NOT EXISTS app_users_single_owner
                         ON app_users ((role))
                         WHERE role = 'owner'
@@ -435,6 +787,25 @@ class PostgresSetupStore:
                     )
                     conn.execute(
                         """
+                        CREATE TABLE IF NOT EXISTS dashboard_invites (
+                            id UUID PRIMARY KEY,
+                            email TEXT NOT NULL REFERENCES app_users(email) ON DELETE CASCADE,
+                            role TEXT NOT NULL,
+                            token_hash TEXT NOT NULL UNIQUE,
+                            expires_at TIMESTAMPTZ NOT NULL,
+                            consumed_at TIMESTAMPTZ,
+                            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+                        )
+                        """
+                    )
+                    conn.execute(
+                        """
+                        CREATE INDEX IF NOT EXISTS dashboard_invites_email_created_at
+                        ON dashboard_invites (email, created_at DESC)
+                        """
+                    )
+                    conn.execute(
+                        """
                         CREATE TABLE IF NOT EXISTS app_settings (
                             key TEXT PRIMARY KEY,
                             value JSONB NOT NULL,
@@ -456,6 +827,23 @@ def create_setup_store(database_url: str | None, *, encryption_key: str) -> Setu
         return PostgresSetupStore(database_url, encryption_key=encryption_key)
 
     return InMemorySetupStore()
+
+
+def hash_dashboard_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _dashboard_user_from_row(row) -> OwnerAccount | None:
+    if not row:
+        return None
+
+    return OwnerAccount(
+        email=row[0],
+        password_hash=row[1],
+        role=row[2],
+        accepted_at=row[3] if len(row) > 3 else None,
+        invited_at=row[4] if len(row) > 4 else None,
+    )
 
 
 def dashboard_settings_to_dict(settings: DashboardSettings) -> dict[str, object]:
