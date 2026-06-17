@@ -260,6 +260,22 @@ def test_dashboard_uses_operational_overview_after_setup() -> None:
     assert "overview-card" in styles_css
 
 
+def test_dashboard_contains_real_analytics_page() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "renderAnalytics" in app_js
+    assert "/api/v1/dashboard/analytics/summary" in app_js
+    assert 'renderPlaceholder("Analytics"' not in app_js
+    assert "DAU" in app_js
+    assert "MAU" in app_js
+    assert "retention-panel" in app_js
+    assert "Login success rate" in app_js
+    assert "analytics-grid" in styles_css
+    assert "retention-grid" in styles_css
+    assert "method-bar" in styles_css
+
+
 def test_static_app_contains_public_hosted_auth_pages() -> None:
     app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")

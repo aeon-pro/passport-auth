@@ -111,6 +111,10 @@ const state = {
   adminsLoading: false,
   adminInviteDevLink: "",
   adminInviteAccepted: false,
+  analytics: null,
+  analyticsLoaded: false,
+  analyticsLoading: false,
+  analyticsError: "",
   settingsLoading: false,
   token: localStorage.getItem(TOKEN_KEY),
   authMode: "login",
@@ -574,6 +578,23 @@ function formatDashboardRole(value) {
   return value === "owner" ? "Owner" : "Admin";
 }
 
+function formatMetricNumber(value) {
+  const numeric = Number(value || 0);
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 1 }).format(numeric);
+}
+
+function formatPercent(value) {
+  return `${formatMetricNumber(value)}%`;
+}
+
+function humanizeAnalyticsEvent(value) {
+  return String(value || "event")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function formatInviteStatus(value) {
   return value === "accepted" ? "Accepted" : "Pending";
 }
@@ -736,6 +757,30 @@ async function loadUsers({ query = state.usersQuery, quiet = false } = {}) {
     }
   } finally {
     state.usersLoading = false;
+    if (!quiet) {
+      render();
+    }
+  }
+}
+
+async function loadAnalytics({ quiet = false } = {}) {
+  if (!state.token || state.analyticsLoading) {
+    return;
+  }
+
+  state.analyticsLoading = true;
+  state.analyticsError = "";
+  if (!quiet) {
+    render();
+  }
+
+  try {
+    state.analytics = await api("/api/v1/dashboard/analytics/summary");
+    state.analyticsLoaded = true;
+  } catch (error) {
+    state.analyticsError = error.message;
+  } finally {
+    state.analyticsLoading = false;
     if (!quiet) {
       render();
     }
@@ -1961,6 +2006,168 @@ function renderDashboard() {
   `);
 }
 
+function emptyAnalyticsSummary() {
+  return {
+    enabled: false,
+    reason: "Analytics are only recorded in production with ClickHouse enabled.",
+    overview: {
+      dau: 0,
+      wau: 0,
+      mau: 0,
+      signups: 0,
+      logins: 0,
+      login_success_rate: 0,
+      failures: 0,
+      refreshes: 0,
+      active_users: 0,
+    },
+    retention: [
+      { label: "Week 1", value: 0 },
+      { label: "Week 2", value: 0 },
+      { label: "Week 3", value: 0 },
+      { label: "Week 4", value: 0 },
+    ],
+    methods: [],
+    recent_events: [],
+  };
+}
+
+function renderAnalytics() {
+  if (!state.analyticsLoaded && !state.analyticsLoading) {
+    void loadAnalytics();
+  }
+
+  const summary = state.analytics || emptyAnalyticsSummary();
+  const overview = summary.overview || emptyAnalyticsSummary().overview;
+  const retention = summary.retention?.length ? summary.retention : emptyAnalyticsSummary().retention;
+  const methods = summary.methods || [];
+  const recentEvents = summary.recent_events || [];
+  const maxMethodCount = Math.max(1, ...methods.map((method) => Number(method.count || 0)));
+  const inactiveMessage = state.analyticsLoading
+    ? "Loading analytics from the dashboard API."
+    : summary.reason || "Analytics are waiting for production ClickHouse events.";
+
+  const overviewMetrics = [
+    { label: "DAU", value: overview.dau, detail: "Distinct users today" },
+    { label: "MAU", value: overview.mau, detail: "Distinct users in 30 days" },
+    { label: "Signups", value: overview.signups, detail: "Last 30 days" },
+    { label: "Logins", value: overview.logins, detail: "Successful attempts" },
+    {
+      label: "Login success rate",
+      value: formatPercent(overview.login_success_rate),
+      detail: "Success vs failures",
+    },
+    { label: "Refreshes", value: overview.refreshes, detail: "Token rotations" },
+    { label: "Failures", value: overview.failures, detail: "Public auth errors" },
+    { label: "Active users", value: overview.active_users, detail: "Any auth activity" },
+  ];
+
+  renderAppShell(`
+    <div class="hero analytics-hero">
+      <div class="page-heading compact-heading">
+        <span class="eyebrow">Dashboard</span>
+        <h2>Analytics</h2>
+        <p>Track public auth events, sign-in health, user activity, and retention from production ClickHouse events.</p>
+      </div>
+      <div class="overview-card analytics-status-card">
+        <div class="panel-heading">
+          <span class="eyebrow">Pipeline</span>
+          <h3>${summary.enabled ? "ClickHouse live" : "Analytics inactive"}</h3>
+        </div>
+        <p>${escapeHtml(inactiveMessage)}</p>
+      </div>
+    </div>
+    ${state.analyticsError ? `<p class="form-error">${escapeHtml(state.analyticsError)}</p>` : ""}
+    <div class="metric-grid analytics-grid" aria-label="Analytics overview">
+      ${overviewMetrics
+        .map(
+          (metric) => `
+            <div class="metric">
+              <span>${escapeHtml(metric.label)}</span>
+              <strong>${escapeHtml(String(metric.value))}</strong>
+              <small>${escapeHtml(metric.detail)}</small>
+            </div>
+          `,
+        )
+        .join("")}
+    </div>
+    <section class="overview-card retention-panel">
+      <div class="panel-heading">
+        <span class="eyebrow">Retention</span>
+        <h3>Cohort return rate</h3>
+      </div>
+      <div class="retention-grid">
+        ${retention
+          .map(
+            (item) => `
+              <article class="retention-card">
+                <span>${escapeHtml(item.label)} retention</span>
+                <strong>${escapeHtml(formatPercent(item.value))}</strong>
+                <div class="retention-track">
+                  <span style="width: ${Math.max(0, Math.min(100, Number(item.value || 0)))}%"></span>
+                </div>
+              </article>
+            `,
+          )
+          .join("")}
+      </div>
+    </section>
+    <div class="analytics-columns">
+      <section class="overview-card">
+        <div class="panel-heading">
+          <span class="eyebrow">Methods</span>
+          <h3>Auth method usage</h3>
+        </div>
+        <div class="method-list">
+          ${
+            methods.length
+              ? methods
+                  .map(
+                    (method) => `
+                      <article class="method-row">
+                        <div class="method-bar">
+                          <span style="width: ${(Number(method.count || 0) / maxMethodCount) * 100}%"></span>
+                        </div>
+                        <strong>${escapeHtml(formatAuthMethod(method.method))}</strong>
+                        <small>${escapeHtml(formatMetricNumber(method.count))}</small>
+                      </article>
+                    `,
+                  )
+                  .join("")
+              : `<p class="muted-copy">No production sign-in events have been recorded yet.</p>`
+          }
+        </div>
+      </section>
+      <section class="overview-card">
+        <div class="panel-heading">
+          <span class="eyebrow">Events</span>
+          <h3>Recent auth activity</h3>
+        </div>
+        <div class="event-list analytics-event-list">
+          ${
+            recentEvents.length
+              ? recentEvents
+                  .map(
+                    (event) => `
+                      <article class="event-row analytics-event-row">
+                        <div>
+                          <strong>${escapeHtml(humanizeAnalyticsEvent(event.event_type))}</strong>
+                          <small>${escapeHtml(formatAuthMethod(event.auth_method))} · ${escapeHtml(event.email || "No email")} · ${escapeHtml(formatUserDate(event.occurred_at))}</small>
+                          ${event.reason ? `<small>${escapeHtml(event.reason)}</small>` : ""}
+                        </div>
+                        <span>${escapeHtml(event.status || "event")}</span>
+                      </article>
+                    `,
+                  )
+                  .join("")
+              : `<p class="muted-copy">No recent production auth events are available.</p>`
+          }
+        </div>
+      </section>
+    </div>
+  `);
+}
+
 function renderPlaceholder(title, body) {
   renderAppShell(`
     <div class="placeholder-view">
@@ -2620,7 +2827,7 @@ function render() {
   }
 
   if (path === "/analytics") {
-    renderPlaceholder("Analytics", "Track public auth events and sign-in health.");
+    renderAnalytics();
     return;
   }
 

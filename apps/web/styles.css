@@ -568,6 +568,124 @@ p {
   font-weight: 560;
 }
 
+.analytics-hero {
+  align-items: end;
+}
+
+.analytics-status-card {
+  min-height: 170px;
+  align-content: space-between;
+}
+
+.analytics-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.analytics-grid .metric {
+  min-height: 118px;
+}
+
+.analytics-grid .metric strong {
+  font-size: 30px;
+}
+
+.retention-panel,
+.analytics-columns {
+  margin-top: 18px;
+}
+
+.retention-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.retention-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.24);
+  padding: 16px;
+}
+
+.retention-card span {
+  color: var(--ink-muted);
+  font-size: 10.5px;
+  font-weight: 620;
+  text-transform: uppercase;
+}
+
+.retention-card strong {
+  color: var(--ink);
+  font-size: 28px;
+  font-weight: 390;
+}
+
+.retention-track,
+.method-bar {
+  overflow: hidden;
+  height: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.retention-track span,
+.method-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--signal);
+}
+
+.analytics-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 18px;
+}
+
+.method-list,
+.analytics-event-list {
+  display: grid;
+  gap: 10px;
+}
+
+.method-row {
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  padding: 14px 16px;
+}
+
+.method-row strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 520;
+}
+
+.method-row small {
+  color: var(--ink-muted);
+  font-size: 12px;
+  font-weight: 560;
+}
+
+.analytics-event-row > span {
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  padding: 5px 8px;
+  text-transform: capitalize;
+}
+
+.muted-copy {
+  max-width: none;
+  margin: 0;
+  color: var(--ink-muted);
+}
+
 .setup-list {
   display: grid;
   gap: 11px;

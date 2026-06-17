@@ -3,7 +3,12 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from starlette.responses import Response
 
-from passport_auth.analytics import AnalyticsSink, create_analytics_sink
+from passport_auth.analytics import (
+    AnalyticsReader,
+    AnalyticsSink,
+    create_analytics_reader,
+    create_analytics_sink,
+)
 from passport_auth.api.v1 import router as api_v1_router
 from passport_auth.auth.email import AuthEmailSender, ResendEmailSender
 from passport_auth.auth.google import GoogleOAuthClient, UrlLibGoogleOAuthClient
@@ -24,6 +29,7 @@ def create_app(
     auth_store: AuthStore | None = None,
     auth_email_sender: AuthEmailSender | None = None,
     analytics_sink: AnalyticsSink | None = None,
+    analytics_reader: AnalyticsReader | None = None,
     google_oauth_client: GoogleOAuthClient | None = None,
     static_dir: str | Path | None = None,
 ) -> FastAPI:
@@ -38,6 +44,7 @@ def create_app(
     app.state.auth_store = auth_store or create_auth_store(resolved_settings.database_url)
     app.state.auth_email_sender = auth_email_sender or ResendEmailSender()
     app.state.analytics_sink = analytics_sink or create_analytics_sink(resolved_settings)
+    app.state.analytics_reader = analytics_reader or create_analytics_reader(resolved_settings)
     app.state.google_oauth_client = google_oauth_client or UrlLibGoogleOAuthClient()
     install_dynamic_cors(app)
     app.include_router(api_v1_router)
