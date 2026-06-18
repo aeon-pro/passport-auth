@@ -32,14 +32,16 @@ def test_static_dashboard_uses_dark_studio_workspace_design() -> None:
     h2_body = css_rule_body(styles_css, "h2")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-18-security-tips" in index_html
-    assert "workspace-rail" in app_js
+    assert "2026-06-18-single-sidebar" in index_html
+    assert "workspace-rail" not in app_js
+    assert "rail-nav" not in app_js
     assert "workspace-sidebar" in app_js
     assert "workspace-topbar" in app_js
     assert "studio-main" in app_js
     assert "settings-matrix" in app_js
     assert "studio-shell" in styles_css
-    assert "workspace-rail" in styles_css
+    assert "workspace-rail" not in styles_css
+    assert "rail-nav" not in styles_css
     assert "workspace-sidebar" in styles_css
     assert "workspace-topbar" in styles_css
     assert "toolbar-search" in styles_css
@@ -105,7 +107,7 @@ def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
     assert "user-label" not in app_js
     assert "topbar-actions" not in app_js
     assert "workspace-sidebar" in app_js
-    assert "workspace-rail" in app_js
+    assert "workspace-rail" not in app_js
     assert "renderSidebarProfile" in app_js
     assert "currentBrandName" in app_js
     assert "profile-menu" in app_js

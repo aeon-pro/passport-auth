@@ -1052,28 +1052,6 @@ function renderAppShell(content) {
 
   app.className = "app-shell studio-shell";
   app.innerHTML = `
-    <aside class="workspace-rail" aria-label="Primary app rail">
-      <a class="rail-brand" href="/" data-link aria-label="${escapeHtml(brandName)} dashboard">
-        ${brandVisualMarkup(brandName, { compact: true, showFallbackMark: false })}
-      </a>
-      <nav class="rail-nav" aria-label="Icon navigation">
-        ${routes
-          .map(
-            (route) => `<a
-                href="${route.href}"
-                data-link
-                class="${route.href === path ? "active" : ""}"
-                title="${route.label}"
-                aria-label="${route.label}"
-              >
-                ${renderRouteIcon(routeMeta[route.href]?.icon)}
-              </a>
-            `,
-          )
-          .join("")}
-      </nav>
-    </aside>
-
     <aside class="workspace-sidebar sidebar" aria-label="Workspace">
       ${brandMarkup(true, { showFallbackMark: false })}
       <nav class="nav" aria-label="Primary">
