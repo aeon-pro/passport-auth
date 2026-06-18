@@ -153,6 +153,39 @@ const routes = [
   { href: "/analytics", label: "Analytics" },
 ];
 
+const routeMeta = {
+  "/": {
+    title: "Dashboard",
+    hint: "Auth operations",
+    icon: "home",
+  },
+  "/users": {
+    title: "Users",
+    hint: "Application directory",
+    icon: "users",
+  },
+  "/admins": {
+    title: "Admins",
+    hint: "Dashboard access",
+    icon: "key",
+  },
+  "/settings": {
+    title: "Settings",
+    hint: "Domains and providers",
+    icon: "sliders",
+  },
+  "/templates": {
+    title: "Templates",
+    hint: "Email copy",
+    icon: "mail",
+  },
+  "/analytics": {
+    title: "Analytics",
+    hint: "Auth health",
+    icon: "chart",
+  },
+};
+
 const hostedAuthPaths = ["/login", "/register", "/verify", "/reset-password"];
 
 const metrics = [
@@ -624,6 +657,28 @@ function renderPencilIcon() {
   `;
 }
 
+function renderRouteIcon(icon) {
+  const paths = {
+    home: '<path d="M4 11.5 12 5l8 6.5V20H5v-8.5Z"></path><path d="M9 20v-5h6v5"></path>',
+    users:
+      '<path d="M16 20v-1.8c0-1.9-1.8-3.2-4-3.2s-4 1.3-4 3.2V20"></path><circle cx="12" cy="9" r="3"></circle><path d="M20 20v-1.5c0-1.4-.9-2.4-2.3-2.9"></path><path d="M16.8 6.4a2.5 2.5 0 0 1 0 5"></path>',
+    key: '<circle cx="8" cy="12" r="3.2"></circle><path d="M11.2 12H21"></path><path d="M16 12v3"></path><path d="M19 12v2"></path>',
+    sliders:
+      '<path d="M5 7h14"></path><path d="M5 17h14"></path><circle cx="9" cy="7" r="2"></circle><circle cx="15" cy="17" r="2"></circle>',
+    mail: '<rect x="4" y="6" width="16" height="12" rx="2"></rect><path d="m5 8 7 5 7-5"></path>',
+    chart: '<path d="M5 19V5"></path><path d="M5 19h14"></path><path d="M8 15l3-4 3 2 4-6"></path>',
+  };
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      ${paths[icon] || paths.home}
+    </svg>
+  `;
+}
+
+function currentRouteMeta() {
+  return routeMeta[currentPath()] || { title: "Dashboard", hint: "Auth operations", icon: "home" };
+}
+
 function parseMetadata(value) {
   const trimmed = String(value || "").trim();
   if (!trimmed) {
@@ -992,17 +1047,41 @@ function renderSidebarProfile() {
 
 function renderAppShell(content) {
   const path = currentPath();
+  const meta = currentRouteMeta();
+  const brandName = currentBrandName();
 
-  app.className = "app-shell obsidian-grid";
+  app.className = "app-shell studio-shell";
   app.innerHTML = `
-    <aside class="shell-rail sidebar" aria-label="Workspace">
+    <aside class="workspace-rail" aria-label="Primary app rail">
+      <a class="rail-brand" href="/" data-link aria-label="${escapeHtml(brandName)} dashboard">
+        ${brandVisualMarkup(brandName, { compact: true, showFallbackMark: false })}
+      </a>
+      <nav class="rail-nav" aria-label="Icon navigation">
+        ${routes
+          .map(
+            (route) => `<a
+                href="${route.href}"
+                data-link
+                class="${route.href === path ? "active" : ""}"
+                title="${route.label}"
+                aria-label="${route.label}"
+              >
+                ${renderRouteIcon(routeMeta[route.href]?.icon)}
+              </a>
+            `,
+          )
+          .join("")}
+      </nav>
+    </aside>
+
+    <aside class="workspace-sidebar sidebar" aria-label="Workspace">
       ${brandMarkup(true, { showFallbackMark: false })}
       <nav class="nav" aria-label="Primary">
         ${routes
           .map(
             (route) => `
               <a href="${route.href}" data-link class="${route.href === path ? "active" : ""}">
-                ${route.label}
+                <span>${route.label}</span>
               </a>
             `,
           )
@@ -1012,7 +1091,17 @@ function renderAppShell(content) {
     </aside>
 
     <main class="content">
-      <section class="workspace command-surface">${content}</section>
+      <header class="workspace-topbar">
+        <div>
+          <strong>${escapeHtml(meta.title)}</strong>
+          <small>${escapeHtml(meta.hint)}</small>
+        </div>
+        <div class="toolbar-search" aria-hidden="true">
+          <span>${renderRouteIcon("home")}</span>
+          <strong>${escapeHtml(brandName)}</strong>
+        </div>
+      </header>
+      <section class="workspace studio-main">${content}</section>
     </main>
   `;
 }
@@ -1471,91 +1560,113 @@ function renderAuth() {
   const resetStart = state.authMode === "reset-start";
   const resetConfirm = state.authMode === "reset-confirm";
 
-  app.className = "auth-screen";
+  app.className = "auth-studio-shell";
   app.innerHTML = `
-    ${brandMarkup(true)}
-    <section class="auth-card" aria-label="Dashboard authentication">
-      <div class="page-heading compact-heading">
-        <span class="eyebrow">Dashboard auth</span>
-        <h2>${login ? "Sign in" : "Reset password"}</h2>
-        <p>${
+    <section class="auth-form-pane" aria-label="Dashboard authentication">
+      ${brandMarkup(true)}
+      <div class="auth-card">
+        <div class="page-heading compact-heading">
+          <span class="eyebrow">Dashboard access</span>
+          <h2>${login ? "Welcome back" : "Reset password"}</h2>
+          <p>${
+            login
+              ? "Sign in to manage users, providers, templates, and analytics."
+              : "Reset access with a one-time code sent to your dashboard email."
+          }</p>
+        </div>
+
+        ${
           login
-            ? "Use a dashboard account email and password."
-            : "Reset access with a one-time code sent to your dashboard email."
-        }</p>
+            ? `
+              <form class="form-grid" data-form="login">
+                <label class="field">
+                  <span>Email address</span>
+                  <input name="email" type="email" autocomplete="email" placeholder="owner@example.com" required />
+                </label>
+                <label class="field">
+                  <span>Password</span>
+                  <input name="password" type="password" autocomplete="current-password" required />
+                </label>
+                ${renderError()}
+                ${renderMessage()}
+                <div class="form-actions">
+                  <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+                    ${state.busy ? "Signing in..." : "Sign in"}
+                  </button>
+                  <button class="text-action" type="button" data-action="reset-start">Reset password</button>
+                </div>
+              </form>
+            `
+            : ""
+        }
+
+        ${
+          resetStart
+            ? `
+              <form class="form-grid" data-form="reset-start">
+                <label class="field">
+                  <span>Owner email</span>
+                  <input name="email" type="email" autocomplete="email" placeholder="owner@example.com" required />
+                </label>
+                ${renderError()}
+                <div class="form-actions">
+                  <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+                    ${state.busy ? "Sending..." : "Send reset OTP"}
+                  </button>
+                  <button class="text-action" type="button" data-action="login">Back to login</button>
+                </div>
+              </form>
+            `
+            : ""
+        }
+
+        ${
+          resetConfirm
+            ? `
+              <form class="form-grid" data-form="reset-confirm">
+                ${renderMessage()}
+                ${state.devOtp ? `<p class="dev-otp">Development OTP: ${escapeHtml(state.devOtp)}</p>` : ""}
+                <label class="field">
+                  <span>OTP</span>
+                  <input name="otp" type="text" inputmode="numeric" placeholder="123456" required />
+                </label>
+                <label class="field">
+                  <span>New password</span>
+                  <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
+                </label>
+                ${renderError()}
+                <div class="form-actions">
+                  <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
+                    ${state.busy ? "Updating..." : "Update password"}
+                  </button>
+                  <button class="text-action" type="button" data-action="login">Back to login</button>
+                </div>
+              </form>
+            `
+            : ""
+        }
       </div>
-
-      ${
-        login
-          ? `
-            <form class="form-grid" data-form="login">
-              <label class="field">
-                <span>Email</span>
-                <input name="email" type="email" autocomplete="email" placeholder="owner@example.com" required />
-              </label>
-              <label class="field">
-                <span>Password</span>
-                <input name="password" type="password" autocomplete="current-password" required />
-              </label>
-              ${renderError()}
-              ${renderMessage()}
-              <div class="form-actions">
-                <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-                  ${state.busy ? "Signing in..." : "Sign in"}
-                </button>
-                <button class="text-action" type="button" data-action="reset-start">Reset password</button>
-              </div>
-            </form>
-          `
-          : ""
-      }
-
-      ${
-        resetStart
-          ? `
-            <form class="form-grid" data-form="reset-start">
-              <label class="field">
-                <span>Owner email</span>
-                <input name="email" type="email" autocomplete="email" placeholder="owner@example.com" required />
-              </label>
-              ${renderError()}
-              <div class="form-actions">
-                <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-                  ${state.busy ? "Sending..." : "Send reset OTP"}
-                </button>
-                <button class="text-action" type="button" data-action="login">Back to login</button>
-              </div>
-            </form>
-          `
-          : ""
-      }
-
-      ${
-        resetConfirm
-          ? `
-            <form class="form-grid" data-form="reset-confirm">
-              ${renderMessage()}
-              ${state.devOtp ? `<p class="dev-otp">Development OTP: ${escapeHtml(state.devOtp)}</p>` : ""}
-              <label class="field">
-                <span>OTP</span>
-                <input name="otp" type="text" inputmode="numeric" placeholder="123456" required />
-              </label>
-              <label class="field">
-                <span>New password</span>
-                <input name="password" type="password" autocomplete="new-password" placeholder="Minimum 12 characters" minlength="12" required />
-              </label>
-              ${renderError()}
-              <div class="form-actions">
-                <button class="primary-action" type="submit" ${state.busy ? "disabled" : ""}>
-                  ${state.busy ? "Updating..." : "Update password"}
-                </button>
-                <button class="text-action" type="button" data-action="login">Back to login</button>
-              </div>
-            </form>
-          `
-          : ""
-      }
     </section>
+    <aside class="auth-visual-pane" aria-hidden="true">
+      <div class="identity-card-visual">
+        <span>${brandVisualMarkup(currentBrandName(), { compact: false })}</span>
+        <div>
+          <small>Users</small>
+          <strong>Verified identities</strong>
+        </div>
+        <dl>
+          <div><dt>Auth</dt><dd>PKCE</dd></div>
+          <div><dt>Tokens</dt><dd>Rotating</dd></div>
+          <div><dt>Email</dt><dd>OTP</dd></div>
+          <div><dt>Admin</dt><dd>Protected</dd></div>
+        </dl>
+      </div>
+      <div class="identity-strip-visual">
+        <span>Hosted pages</span>
+        <span>Public API</span>
+        <span>Dashboard</span>
+      </div>
+    </aside>
   `;
 }
 
@@ -1631,7 +1742,7 @@ function renderHostedAuthPage(path = currentPath()) {
     "/reset-password": "Reset password",
   }[path] || "Sign in";
 
-  app.className = "hosted-auth-shell obsidian-grid";
+  app.className = "hosted-auth-shell studio-shell";
   app.innerHTML = `
     <main class="hosted-auth-main">
       <div class="hosted-auth-brand">
@@ -1664,7 +1775,7 @@ function renderHostedAuthPage(path = currentPath()) {
 }
 
 function renderHostedSetupRequired() {
-  app.className = "hosted-auth-shell obsidian-grid";
+  app.className = "hosted-auth-shell studio-shell";
   app.innerHTML = `
     <main class="hosted-auth-main">
       <div class="hosted-auth-brand">

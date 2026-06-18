@@ -25,18 +25,41 @@ def test_static_dashboard_contains_multi_step_onboarding() -> None:
     assert "step-rail" in styles_css
 
 
-def test_static_dashboard_uses_obsidian_control_room_design() -> None:
+def test_static_dashboard_uses_dark_studio_workspace_design() -> None:
     index_html = (WEB_DIR / "index.html").read_text(encoding="utf-8")
     app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
     styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+    h2_body = css_rule_body(styles_css, "h2")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-05-loading-logo" in index_html
-    assert "shell-rail" in app_js
-    assert "command-surface" in app_js
+    assert "2026-06-18-studio-shell" in index_html
+    assert "workspace-rail" in app_js
+    assert "workspace-sidebar" in app_js
+    assert "workspace-topbar" in app_js
+    assert "studio-main" in app_js
     assert "settings-matrix" in app_js
-    assert "obsidian-grid" in styles_css
-    assert "kinetic-line" in styles_css
+    assert "studio-shell" in styles_css
+    assert "workspace-rail" in styles_css
+    assert "workspace-sidebar" in styles_css
+    assert "workspace-topbar" in styles_css
+    assert "toolbar-search" in styles_css
+    assert "obsidian-grid" not in styles_css
+    assert "kinetic-line" not in styles_css
+    assert "font-size: 54px;" not in h2_body
+    assert "font-weight: 390;" not in h2_body
+
+
+def test_dashboard_auth_uses_split_workspace_login() -> None:
+    app_js = (WEB_DIR / "app.js").read_text(encoding="utf-8")
+    styles_css = (WEB_DIR / "styles.css").read_text(encoding="utf-8")
+
+    assert "auth-studio-shell" in app_js
+    assert "auth-form-pane" in app_js
+    assert "auth-visual-pane" in app_js
+    assert "identity-card-visual" in app_js
+    assert "auth-studio-shell" in styles_css
+    assert "auth-visual-pane" in styles_css
+    assert "identity-card-visual" in styles_css
 
 
 def test_static_dashboard_has_polished_loading_screen() -> None:
@@ -77,6 +100,8 @@ def test_dashboard_sidebar_owns_brand_and_profile_chrome() -> None:
     assert "status-pill" not in app_js
     assert "user-label" not in app_js
     assert "topbar-actions" not in app_js
+    assert "workspace-sidebar" in app_js
+    assert "workspace-rail" in app_js
     assert "renderSidebarProfile" in app_js
     assert "currentBrandName" in app_js
     assert "profile-menu" in app_js
