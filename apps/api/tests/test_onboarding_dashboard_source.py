@@ -32,7 +32,7 @@ def test_static_dashboard_uses_dark_studio_workspace_design() -> None:
     h2_body = css_rule_body(styles_css, "h2")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-18-studio-shell" in index_html
+    assert "2026-06-18-security-tips" in index_html
     assert "workspace-rail" in app_js
     assert "workspace-sidebar" in app_js
     assert "workspace-topbar" in app_js
@@ -56,10 +56,14 @@ def test_dashboard_auth_uses_split_workspace_login() -> None:
     assert "auth-studio-shell" in app_js
     assert "auth-form-pane" in app_js
     assert "auth-visual-pane" in app_js
-    assert "identity-card-visual" in app_js
+    assert "security-tips-panel" in app_js
+    assert "Security checklist" in app_js
+    assert "Review redirect URLs" in app_js
+    assert "identity-card-visual" not in app_js
+    assert "identity-strip-visual" not in app_js
     assert "auth-studio-shell" in styles_css
     assert "auth-visual-pane" in styles_css
-    assert "identity-card-visual" in styles_css
+    assert "security-tips-panel" in styles_css
 
 
 def test_static_dashboard_has_polished_loading_screen() -> None:

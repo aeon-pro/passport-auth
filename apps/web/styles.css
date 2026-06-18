@@ -2650,141 +2650,73 @@ p {
   min-height: 100vh;
   align-content: center;
   justify-items: center;
-  gap: 16px;
   overflow: hidden;
   background:
-    linear-gradient(155deg, rgba(255, 255, 255, 0.08), transparent 34%),
-    linear-gradient(24deg, rgba(255, 255, 255, 0.035), transparent 48%);
+    radial-gradient(circle at 52% 40%, rgba(255, 255, 255, 0.065), transparent 300px),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent 45%),
+    #070708;
   padding: 48px;
-}
-
-.auth-visual-pane::before {
-  position: absolute;
-  inset: 12% -12% auto 10%;
-  height: 46%;
-  border: 1px solid rgba(255, 255, 255, 0.07);
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.012));
-  content: "";
-  transform: skewY(-13deg);
 }
 
 .auth-visual-pane::after {
   position: absolute;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  height: 42%;
+  inset: 0;
   background:
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px) 0 0 /
-      24px 24px,
-    linear-gradient(180deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px) 0 0 /
-      24px 24px;
+    linear-gradient(90deg, rgba(255, 255, 255, 0.026) 1px, transparent 1px) 0 0 /
+      38px 38px,
+    linear-gradient(180deg, rgba(255, 255, 255, 0.022) 1px, transparent 1px) 0 0 /
+      38px 38px;
   content: "";
-  opacity: 0.46;
-  mask-image: linear-gradient(180deg, transparent, #000 35%);
+  opacity: 0.5;
+  mask-image: radial-gradient(circle at center, #000, transparent 72%);
 }
 
-.identity-card-visual,
-.identity-strip-visual {
+.security-tips-panel {
   position: relative;
   z-index: 1;
-  width: min(520px, 88%);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
-  color: #111113;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.28);
-}
-
-.identity-card-visual {
   display: grid;
-  grid-template-columns: 86px minmax(0, 1fr);
+  width: min(440px, 88%);
   gap: 22px;
-  padding: 28px;
 }
 
-.identity-card-visual > span {
+.security-tips-panel h3 {
+  max-width: 340px;
+  color: #f7f7f3;
+  font-size: 26px;
+  font-weight: 480;
+  line-height: 1.12;
+}
+
+.security-tips-panel ul {
   display: grid;
-  width: 86px;
-  height: 86px;
-  place-items: center;
-  overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  background: #f6f6f2;
-}
-
-.identity-card-visual .brand-logo,
-.identity-card-visual .brand-mark {
-  width: 58px;
-  height: 58px;
-}
-
-.identity-card-visual small {
-  color: #77777e;
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-}
-
-.identity-card-visual strong {
-  display: block;
-  margin-top: 6px;
-  color: #111113;
-  font-size: 22px;
-  font-weight: 620;
-}
-
-.identity-card-visual dl {
-  display: grid;
-  grid-column: 1 / -1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin: 8px 0 0;
-}
-
-.identity-card-visual div {
-  min-width: 0;
-}
-
-.identity-card-visual dl div {
-  display: grid;
-  gap: 4px;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
-  padding-top: 12px;
-}
-
-.identity-card-visual dt {
-  color: #86868c;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-}
-
-.identity-card-visual dd {
+  gap: 0;
   margin: 0;
-  color: #202024;
+  padding: 0;
+  list-style: none;
+}
+
+.security-tips-panel li {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 17px 0;
+}
+
+.security-tips-panel li:last-child {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.security-tips-panel strong {
+  color: #f2f2ee;
   font-size: 13px;
   font-weight: 560;
 }
 
-.identity-strip-visual {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0;
-  padding: 16px 18px;
-}
-
-.identity-strip-visual span {
-  border-right: 1px solid rgba(0, 0, 0, 0.08);
-  color: #77777e;
+.security-tips-panel span:not(.eyebrow) {
+  color: #8f8f89;
   font-size: 12px;
-  font-weight: 560;
-  text-align: center;
-}
-
-.identity-strip-visual span:last-child {
-  border-right: 0;
+  font-weight: 360;
+  line-height: 1.45;
 }
 
 @media (max-width: 1120px) {

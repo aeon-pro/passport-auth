@@ -1647,25 +1647,29 @@ function renderAuth() {
         }
       </div>
     </section>
-    <aside class="auth-visual-pane" aria-hidden="true">
-      <div class="identity-card-visual">
-        <span>${brandVisualMarkup(currentBrandName(), { compact: false })}</span>
-        <div>
-          <small>Users</small>
-          <strong>Verified identities</strong>
-        </div>
-        <dl>
-          <div><dt>Auth</dt><dd>PKCE</dd></div>
-          <div><dt>Tokens</dt><dd>Rotating</dd></div>
-          <div><dt>Email</dt><dd>OTP</dd></div>
-          <div><dt>Admin</dt><dd>Protected</dd></div>
-        </dl>
-      </div>
-      <div class="identity-strip-visual">
-        <span>Hosted pages</span>
-        <span>Public API</span>
-        <span>Dashboard</span>
-      </div>
+    <aside class="auth-visual-pane" aria-label="Security tips">
+      <section class="security-tips-panel">
+        <span class="eyebrow">Security checklist</span>
+        <h3>Keep dashboard access tight.</h3>
+        <ul>
+          <li>
+            <strong>Use owner-only email</strong>
+            <span>Keep dashboard accounts separate from public app users.</span>
+          </li>
+          <li>
+            <strong>Rotate provider secrets</strong>
+            <span>Update Resend and Google OAuth keys when team access changes.</span>
+          </li>
+          <li>
+            <strong>Review redirect URLs</strong>
+            <span>Only allow exact production and approved development callbacks.</span>
+          </li>
+          <li>
+            <strong>Block suspicious users</strong>
+            <span>Use the Users page to block accounts and revoke access quickly.</span>
+          </li>
+        </ul>
+      </section>
     </aside>
   `;
 }
