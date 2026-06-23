@@ -10,6 +10,8 @@ from uuid import uuid4
 from passport_auth.setup.passwords import hash_password, verify_password
 from passport_auth.setup.secrets import decrypt_secret, encrypt_secret
 
+MAX_OTP_ATTEMPTS = 5
+
 
 class SetupAlreadyCompleteError(Exception):
     """Raised when an owner account already exists."""
@@ -37,6 +39,7 @@ class PasswordResetOtp:
     email: str
     otp_hash: str
     expires_at: int
+    attempts: int = 0
 
 
 @dataclass(frozen=True)
@@ -339,14 +342,28 @@ class InMemorySetupStore:
             email=email,
             otp_hash=hash_password(otp),
             expires_at=expires_at,
+            attempts=0,
         )
 
     def consume_password_reset_otp(self, *, email: str, otp: str, now: int) -> bool:
         reset_otp = self.password_reset_otps.get(email)
-        if not reset_otp or reset_otp.expires_at < now:
+        if not reset_otp:
             return False
 
+        if reset_otp.expires_at < now:
+            del self.password_reset_otps[email]
+            return False
         if not verify_password(otp, reset_otp.otp_hash):
+            attempts = reset_otp.attempts + 1
+            if attempts >= MAX_OTP_ATTEMPTS:
+                del self.password_reset_otps[email]
+            else:
+                self.password_reset_otps[email] = PasswordResetOtp(
+                    email=reset_otp.email,
+                    otp_hash=reset_otp.otp_hash,
+                    expires_at=reset_otp.expires_at,
+                    attempts=attempts,
+                )
             return False
 
         del self.password_reset_otps[email]
@@ -601,6 +618,7 @@ class PostgresSetupStore:
                       AND consumed_at IS NULL
                       AND expires_at >= %s
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (hash_dashboard_token(token), now_datetime),
                 ).fetchone()
@@ -650,18 +668,40 @@ class PostgresSetupStore:
             with conn.transaction():
                 row = conn.execute(
                     """
-                    SELECT id, otp_hash
+                    SELECT id, otp_hash, attempts
                     FROM password_reset_otps
                     WHERE email = %s
                       AND expires_at >= %s
                       AND consumed_at IS NULL
                     ORDER BY created_at DESC
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (email, now_datetime),
                 ).fetchone()
 
-                if not row or not verify_password(otp, row[1]):
+                if not row:
+                    return False
+
+                if not verify_password(otp, row[1]):
+                    if int(row[2] or 0) + 1 >= MAX_OTP_ATTEMPTS:
+                        conn.execute(
+                            """
+                            UPDATE password_reset_otps
+                            SET consumed_at = now()
+                            WHERE id = %s
+                            """,
+                            (row[0],),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            UPDATE password_reset_otps
+                            SET attempts = attempts + 1
+                            WHERE id = %s
+                            """,
+                            (row[0],),
+                        )
                     return False
 
                 conn.execute(
@@ -773,6 +813,7 @@ class PostgresSetupStore:
                             id UUID PRIMARY KEY,
                             email TEXT NOT NULL,
                             otp_hash TEXT NOT NULL,
+                            attempts INTEGER NOT NULL DEFAULT 0,
                             expires_at TIMESTAMPTZ NOT NULL,
                             consumed_at TIMESTAMPTZ,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -783,6 +824,12 @@ class PostgresSetupStore:
                         """
                         CREATE INDEX IF NOT EXISTS password_reset_otps_email_created_at
                         ON password_reset_otps (email, created_at DESC)
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE password_reset_otps
+                        ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0
                         """
                     )
                     conn.execute(

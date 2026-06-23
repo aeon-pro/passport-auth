@@ -13,11 +13,12 @@ from passport_auth.api.v1 import router as api_v1_router
 from passport_auth.auth.email import AuthEmailSender, ResendEmailSender
 from passport_auth.auth.google import GoogleOAuthClient, UrlLibGoogleOAuthClient
 from passport_auth.auth.store import AuthStore, create_auth_store
-from passport_auth.core.config import Settings, get_settings
+from passport_auth.core.config import Settings, get_settings, validate_runtime_security
 from passport_auth.core.environment import (
     is_development_environment,
     is_local_development_url,
 )
+from passport_auth.core.rate_limit import RateLimiter, create_rate_limiter
 from passport_auth.setup.store import SetupStore, create_setup_store
 from passport_auth.web.static import mount_dashboard, mount_dashboard_assets
 
@@ -31,11 +32,13 @@ def create_app(
     analytics_sink: AnalyticsSink | None = None,
     analytics_reader: AnalyticsReader | None = None,
     google_oauth_client: GoogleOAuthClient | None = None,
+    rate_limiter: RateLimiter | None = None,
     static_dir: str | Path | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Passport Auth API")
 
     resolved_settings = settings or get_settings()
+    validate_runtime_security(resolved_settings)
     app.state.settings = resolved_settings
     app.state.setup_store = setup_store or create_setup_store(
         resolved_settings.database_url,
@@ -46,6 +49,7 @@ def create_app(
     app.state.analytics_sink = analytics_sink or create_analytics_sink(resolved_settings)
     app.state.analytics_reader = analytics_reader or create_analytics_reader(resolved_settings)
     app.state.google_oauth_client = google_oauth_client or UrlLibGoogleOAuthClient()
+    app.state.rate_limiter = rate_limiter or create_rate_limiter(resolved_settings.redis_url)
     install_dynamic_cors(app)
     app.include_router(api_v1_router)
     mount_dashboard_assets(app, resolved_settings.dashboard_asset_dir)

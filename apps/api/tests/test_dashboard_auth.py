@@ -59,7 +59,7 @@ async def test_owner_can_login_and_read_dashboard_profile() -> None:
 
 
 @pytest.mark.asyncio
-async def test_dashboard_login_token_is_long_lived_by_default() -> None:
+async def test_dashboard_login_token_expires_after_default_workday_window() -> None:
     _, app = create_test_app()
     transport = ASGITransport(app=app)
     issued_at = int(time.time())
@@ -80,7 +80,7 @@ async def test_dashboard_login_token_is_long_lived_by_default() -> None:
     ttl_seconds = int(payload["exp"]) - issued_at
 
     assert login_response.status_code == 200
-    assert ttl_seconds >= 31_536_000 - 5
+    assert 28_800 - 5 <= ttl_seconds <= 28_800 + 5
 
 
 @pytest.mark.asyncio

@@ -10,6 +10,10 @@ from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
+STRONG_ENCRYPTION_KEY = "public-auth-encryption-secret-value-32"
+STRONG_DASHBOARD_JWT_SECRET = "public-auth-dashboard-jwt-secret-32"
+STRONG_PUBLIC_JWT_SECRET = "public-auth-public-jwt-secret-value"
+
 
 def pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode("utf-8")).digest()
@@ -218,7 +222,12 @@ async def test_public_auth_request_validation_reports_redirect_url_mismatch() ->
         )
     )
     app = create_app(
-        settings=Settings(app_encryption_key="test-public-auth-secret", app_env="production"),
+        settings=Settings(
+            app_encryption_key=STRONG_ENCRYPTION_KEY,
+            app_env="production",
+            dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
+            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+        ),
         setup_store=setup_store,
         auth_store=InMemoryAuthStore(),
     )
@@ -312,6 +321,55 @@ async def test_public_otp_and_magic_link_flows_send_email_and_issue_auth_codes()
     assert magic_consume.status_code == 200
     assert "authorization_code" in magic_consume.json()
     assert [message["template_key"] for message in email_sender.messages] == ["otp", "magic_link"]
+
+
+@pytest.mark.asyncio
+async def test_public_otp_verify_locks_code_after_failed_attempts() -> None:
+    verifier = "correct horse battery staple public verifier"
+    _, _, app = create_public_auth_app()
+    transport = ASGITransport(app=app)
+    payload = {
+        "email": "lockout@example.com",
+        "redirect_url": "https://app.example.com/auth/callback",
+        "code_challenge": pkce_challenge(verifier),
+    }
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        otp_start = await client.post("/api/v1/auth/otp/start", json=payload)
+        failed_responses = [
+            await client.post("/api/v1/auth/otp/verify", json={**payload, "otp": "000000"})
+            for _ in range(5)
+        ]
+        correct_after_lockout = await client.post(
+            "/api/v1/auth/otp/verify",
+            json={**payload, "otp": otp_start.json()["dev_otp"]},
+        )
+
+    assert otp_start.status_code == 200
+    assert [response.status_code for response in failed_responses] == [400, 400, 400, 400, 400]
+    assert correct_after_lockout.status_code == 400
+    assert correct_after_lockout.json() == {"detail": "Invalid or expired OTP."}
+
+
+@pytest.mark.asyncio
+async def test_public_auth_start_endpoints_are_rate_limited() -> None:
+    verifier = "correct horse battery staple public verifier"
+    _, _, app = create_public_auth_app()
+    transport = ASGITransport(app=app)
+    payload = {
+        "email": "rate-limit@example.com",
+        "redirect_url": "https://app.example.com/auth/callback",
+        "code_challenge": pkce_challenge(verifier),
+    }
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        responses = [
+            await client.post("/api/v1/auth/otp/start", json=payload)
+            for _ in range(4)
+        ]
+
+    assert [response.status_code for response in responses] == [200, 200, 200, 429]
+    assert responses[-1].json() == {"detail": "Too many authentication attempts. Try again later."}
 
 
 @pytest.mark.asyncio

@@ -34,9 +34,16 @@ def get_setup_store(request: Request) -> SetupStore:
     return request.app.state.setup_store
 
 
-def build_setup_status(owner: OwnerAccount | None) -> SetupStatusResponse:
+def build_setup_status(
+    owner: OwnerAccount | None,
+    *,
+    include_owner: bool = False,
+) -> SetupStatusResponse:
     if not owner:
         return SetupStatusResponse(setup_complete=False, owner=None)
+
+    if not include_owner:
+        return SetupStatusResponse(setup_complete=True, owner=None)
 
     return SetupStatusResponse(
         setup_complete=True,
@@ -64,4 +71,4 @@ def create_owner_account(
             detail="Setup is already complete.",
         ) from exc
 
-    return build_setup_status(owner)
+    return build_setup_status(owner, include_owner=True)

@@ -5,6 +5,10 @@ from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
+STRONG_ENCRYPTION_KEY = "environment-policy-encryption-key-32"
+STRONG_DASHBOARD_JWT_SECRET = "environment-policy-dashboard-jwt32"
+STRONG_PUBLIC_JWT_SECRET = "environment-policy-public-jwt-key32"
+
 
 def create_app_with_environment(app_env: str) -> object:
     setup_store = InMemorySetupStore()
@@ -20,7 +24,12 @@ def create_app_with_environment(app_env: str) -> object:
         )
     )
     return create_app(
-        settings=Settings(app_encryption_key="test-secret", app_env=app_env),
+        settings=Settings(
+            app_encryption_key=STRONG_ENCRYPTION_KEY,
+            app_env=app_env,
+            dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
+            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+        ),
         setup_store=setup_store,
     )
 

@@ -103,11 +103,13 @@ default.
 For production, change these values in Coolify instead of relying on the development defaults:
 
 - `APP_ENV=production`
-- `APP_ENCRYPTION_KEY`, kept stable across deploys because it signs dashboard sessions
+- `APP_ENCRYPTION_KEY`, kept stable across deploys because it encrypts provider secrets
+- `DASHBOARD_JWT_SECRET`, a separate stable secret for dashboard sessions
+- `PUBLIC_JWT_SECRET`, a separate stable secret for public auth access tokens
 - `POSTGRES_PASSWORD`
 - `CLICKHOUSE_PASSWORD`
 - `DATABASE_URL`, `CLICKHOUSE_URL`, or `REDIS_URL` only if you use external services
-- `DASHBOARD_JWT_TTL_SECONDS`, defaults to `31536000` for one-year dashboard sessions
+- `DASHBOARD_JWT_TTL_SECONDS`, defaults to `28800` for 8-hour dashboard sessions
 - `DASHBOARD_ASSET_DIR`, defaults to `/app/data/dashboard-assets` in Compose and is mounted
   to the `dashboard-assets` volume for uploaded logos
 

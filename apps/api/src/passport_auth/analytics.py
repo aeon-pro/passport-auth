@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import hmac
 import json
 import urllib.parse
 import urllib.request
@@ -379,6 +381,39 @@ def should_record_public_auth_analytics(
             return False
 
     return True
+
+
+def analytics_email_identifier(email: str, *, secret: str) -> str:
+    normalized = email.strip().lower()
+    if not normalized:
+        return ""
+    return hmac.new(
+        secret.encode("utf-8"),
+        normalized.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def analytics_redirect_url(value: str) -> str:
+    return _sanitized_url(value, keep_path=True)
+
+
+def analytics_origin(value: str) -> str:
+    return _sanitized_url(value, keep_path=False)
+
+
+def _sanitized_url(value: str, *, keep_path: bool) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        return ""
+    try:
+        parsed = urllib.parse.urlsplit(cleaned)
+    except ValueError:
+        return ""
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    path = parsed.path if keep_path else ""
+    return urllib.parse.urlunsplit((parsed.scheme.lower(), parsed.netloc.lower(), path, "", ""))
 
 
 def is_local_or_insecure_url(value: str) -> bool:

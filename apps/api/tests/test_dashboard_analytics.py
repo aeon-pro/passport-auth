@@ -5,6 +5,10 @@ from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import InMemorySetupStore
 
+STRONG_ENCRYPTION_KEY = "dashboard-analytics-encryption-secret"
+STRONG_DASHBOARD_JWT_SECRET = "dashboard-analytics-dashboard-jwt"
+STRONG_PUBLIC_JWT_SECRET = "dashboard-analytics-public-jwt-key"
+
 
 async def login_owner(client: AsyncClient) -> str:
     response = await client.post(
@@ -118,7 +122,9 @@ async def test_dashboard_analytics_returns_reader_summary_in_production() -> Non
     app = create_dashboard_app(
         settings=Settings(
             app_env="production",
-            app_encryption_key="test-dashboard-analytics-secret",
+            app_encryption_key=STRONG_ENCRYPTION_KEY,
+            dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
+            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
             clickhouse_url="http://clickhouse:8123/passport_auth",
         ),
         analytics_reader=FakeAnalyticsReader(),

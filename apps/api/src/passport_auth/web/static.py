@@ -6,7 +6,19 @@ from starlette.staticfiles import StaticFiles
 
 STATIC_HEADERS = {
     "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "script-src 'self'; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://accounts.google.com https://oauth2.googleapis.com; "
+        "object-src 'none'; "
+        "base-uri 'none'; "
+        "frame-ancestors 'none'"
+    ),
     "Pragma": "no-cache",
+    "Referrer-Policy": "no-referrer",
+    "X-Content-Type-Options": "nosniff",
 }
 
 

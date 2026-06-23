@@ -10,7 +10,13 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field, field_validator
 
-from passport_auth.analytics import PublicAuthAnalyticsEvent, should_record_public_auth_analytics
+from passport_auth.analytics import (
+    PublicAuthAnalyticsEvent,
+    analytics_email_identifier,
+    analytics_origin,
+    analytics_redirect_url,
+    should_record_public_auth_analytics,
+)
 from passport_auth.auth.email import AuthEmailSender, EmailDeliveryError
 from passport_auth.auth.google import GoogleOAuthClient, GoogleOAuthError
 from passport_auth.auth.store import AuthStore, AuthUser, AuthUserAlreadyExistsError
@@ -20,12 +26,18 @@ from passport_auth.core.environment import (
     is_development_environment,
     is_local_development_url,
 )
+from passport_auth.core.rate_limit import RateLimiter, rate_limit_client
 from passport_auth.dashboard.tokens import InvalidTokenError
 from passport_auth.setup.passwords import verify_password
 from passport_auth.setup.store import DashboardSettings, SetupStore
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 DEFAULT_BLOCKED_MESSAGE = "This account is blocked. Contact support for more help."
+RATE_LIMIT_DETAIL = "Too many authentication attempts. Try again later."
+START_RATE_LIMIT = (3, 900)
+VERIFY_RATE_LIMIT = (10, 600)
+LOGIN_RATE_LIMIT = (5, 300)
+TOKEN_RATE_LIMIT = (30, 300)
 
 
 class AuthCodeRequest(BaseModel):
@@ -185,6 +197,26 @@ def get_google_oauth_client(request: Request) -> GoogleOAuthClient:
     return request.app.state.google_oauth_client
 
 
+def get_rate_limiter(request: Request) -> RateLimiter:
+    return request.app.state.rate_limiter
+
+
+def enforce_auth_rate_limit(
+    *,
+    request: Request,
+    rate_limiter: RateLimiter,
+    scope: str,
+    subject: str,
+    limit: int,
+    window_seconds: int,
+) -> None:
+    client_host = request.client.host if request.client else None
+    client = rate_limit_client(request.headers, client_host)
+    key = f"public-auth:{scope}:{client}:{subject.strip().lower()}"
+    if not rate_limiter.hit(key, limit=limit, window_seconds=window_seconds):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=RATE_LIMIT_DETAIL)
+
+
 def request_origin(request: Request) -> str:
     return request.headers.get("Origin") or request.headers.get("Referer") or ""
 
@@ -216,9 +248,12 @@ def track_public_auth_event(
             auth_method=auth_method,
             status=status_value,
             user_id=user.id if user else "",
-            email=(user.email if user else email).strip().lower(),
-            redirect_url=redirect_url,
-            origin=origin,
+            email=analytics_email_identifier(
+                user.email if user else email,
+                secret=settings.app_encryption_key,
+            ),
+            redirect_url=analytics_redirect_url(redirect_url),
+            origin=analytics_origin(origin),
             reason=reason,
             properties=properties or {},
         )
@@ -359,7 +394,7 @@ def issue_token_pair(
         user_id=user.id,
         email=user.email,
         role=user.role,
-        secret=settings.app_encryption_key,
+        secret=settings.resolved_public_jwt_secret,
         ttl_seconds=settings.public_access_token_ttl_seconds,
     )
     return TokenResponse(
@@ -493,10 +528,19 @@ def start_register(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     email_sender: Annotated[AuthEmailSender, Depends(get_auth_email_sender)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> SendStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_login_enabled, "Password registration")
     validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="register-start",
+        subject=payload.email,
+        limit=START_RATE_LIMIT[0],
+        window_seconds=START_RATE_LIMIT[1],
+    )
 
     if auth_store.get_user_by_email(payload.email):
         raise HTTPException(
@@ -540,9 +584,18 @@ def verify_register(
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_login_enabled, "Password registration")
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="register-verify",
+        subject=payload.email,
+        limit=VERIFY_RATE_LIMIT[0],
+        window_seconds=VERIFY_RATE_LIMIT[1],
+    )
 
     pending_registration = auth_store.consume_pending_registration(
         email=payload.email,
@@ -600,10 +653,19 @@ def password_login(
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_login_enabled, "Password login")
     validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="password-login",
+        subject=payload.email,
+        limit=LOGIN_RATE_LIMIT[0],
+        window_seconds=LOGIN_RATE_LIMIT[1],
+    )
 
     user = auth_store.get_user_by_email(payload.email)
     if (
@@ -654,10 +716,19 @@ def start_otp(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     email_sender: Annotated[AuthEmailSender, Depends(get_auth_email_sender)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> SendStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.otp_login_enabled, "OTP login")
     validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="otp-start",
+        subject=payload.email,
+        limit=START_RATE_LIMIT[0],
+        window_seconds=START_RATE_LIMIT[1],
+    )
 
     otp = f"{secrets.randbelow(1_000_000):06d}"
     auth_store.create_otp(
@@ -692,10 +763,19 @@ def verify_otp(
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.otp_login_enabled, "OTP login")
     validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="otp-verify",
+        subject=payload.email,
+        limit=VERIFY_RATE_LIMIT[0],
+        window_seconds=VERIFY_RATE_LIMIT[1],
+    )
 
     if not auth_store.consume_otp(
         email=payload.email,
@@ -747,10 +827,19 @@ def start_magic_link(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     email_sender: Annotated[AuthEmailSender, Depends(get_auth_email_sender)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> SendStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.magic_link_enabled, "Magic link")
     validate_redirect_url(dashboard_settings, payload.redirect_url, app_env=settings.app_env)
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="magic-link-start",
+        subject=payload.email,
+        limit=START_RATE_LIMIT[0],
+        window_seconds=START_RATE_LIMIT[1],
+    )
 
     token = secrets.token_urlsafe(48)
     auth_store.create_magic_link(
@@ -790,9 +879,18 @@ def consume_magic_link(
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> AuthCodeResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.magic_link_enabled, "Magic link")
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="magic-link-consume",
+        subject=payload.token[:24],
+        limit=VERIFY_RATE_LIMIT[0],
+        window_seconds=VERIFY_RATE_LIMIT[1],
+    )
 
     magic_link = auth_store.consume_magic_link(token=payload.token, now=int(time.time()))
     if not magic_link:
@@ -839,9 +937,18 @@ def start_password_reset(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     email_sender: Annotated[AuthEmailSender, Depends(get_auth_email_sender)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> SendStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.password_reset_otp_enabled, "Password reset OTP")
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="password-reset-start",
+        subject=payload.email,
+        limit=START_RATE_LIMIT[0],
+        window_seconds=START_RATE_LIMIT[1],
+    )
 
     user = auth_store.get_user_by_email(payload.email)
     if not user:
@@ -887,7 +994,16 @@ def confirm_password_reset(
     payload: PasswordResetConfirmRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> OkResponse:
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="password-reset-confirm",
+        subject=payload.email,
+        limit=VERIFY_RATE_LIMIT[0],
+        window_seconds=VERIFY_RATE_LIMIT[1],
+    )
     if not auth_store.consume_otp(
         email=payload.email,
         otp=payload.otp,
@@ -926,12 +1042,21 @@ def start_google_oauth(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     google_client: Annotated[GoogleOAuthClient, Depends(get_google_oauth_client)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
     redirect_url: str = Query(min_length=8, max_length=2048),
     code_challenge: str = Query(min_length=32, max_length=256),
 ) -> GoogleStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.google_oauth_enabled, "Google OAuth")
     validate_redirect_url(dashboard_settings, redirect_url, app_env=settings.app_env)
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="google-start",
+        subject=redirect_url,
+        limit=TOKEN_RATE_LIMIT[0],
+        window_seconds=TOKEN_RATE_LIMIT[1],
+    )
     if not dashboard_settings.google_client_id or not dashboard_settings.google_client_secret:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -967,12 +1092,21 @@ def complete_google_oauth(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     google_client: Annotated[GoogleOAuthClient, Depends(get_google_oauth_client)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
     state: str = Query(min_length=20, max_length=512),
     code: str = Query(min_length=1, max_length=2048),
     response: str = Query(default="redirect", max_length=16),
 ):
     dashboard_settings = setup_store.get_dashboard_settings()
     require_method(dashboard_settings.google_oauth_enabled, "Google OAuth")
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="google-callback",
+        subject=state[:24],
+        limit=TOKEN_RATE_LIMIT[0],
+        window_seconds=TOKEN_RATE_LIMIT[1],
+    )
     oauth_state = auth_store.consume_oauth_state(state=state, now=int(time.time()))
     if not oauth_state:
         track_public_auth_event(
@@ -1056,7 +1190,16 @@ def exchange_token(
     payload: TokenExchangeRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> TokenResponse:
+    enforce_auth_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="token-exchange",
+        subject=payload.code[:24],
+        limit=TOKEN_RATE_LIMIT[0],
+        window_seconds=TOKEN_RATE_LIMIT[1],
+    )
     auth_code = auth_store.consume_auth_code(code=payload.code, now=int(time.time()))
     if not auth_code or not verify_pkce(payload.code_verifier, auth_code.code_challenge):
         track_public_auth_event(
@@ -1175,7 +1318,7 @@ def me(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
 
     try:
-        payload = decode_public_access_token(token, secret=settings.app_encryption_key)
+        payload = decode_public_access_token(token, secret=settings.resolved_public_jwt_secret)
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -10,6 +10,7 @@ from passport_auth.api.v1.dashboard_auth import (
     get_current_dashboard_user,
     get_settings,
     get_setup_store,
+    require_owner,
 )
 from passport_auth.auth.email import AuthEmailSender, EmailDeliveryError
 from passport_auth.core.config import Settings
@@ -91,11 +92,6 @@ def build_admin_response(user: OwnerAccount) -> DashboardAdminResponse:
     )
 
 
-def require_owner(user: OwnerAccount) -> None:
-    if user.role != "owner":
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=OWNER_ONLY_MESSAGE)
-
-
 def dashboard_origin(dashboard_settings: DashboardSettings) -> str:
     domain = (dashboard_settings.auth_domain or dashboard_settings.app_domain).strip().rstrip("/")
     if not domain:
@@ -138,9 +134,10 @@ def send_invite_email(
 
 @router.get("")
 def list_dashboard_admins(
-    _user: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    current_user: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> DashboardAdminsResponse:
+    require_owner(current_user, OWNER_ONLY_MESSAGE)
     admins = setup_store.list_dashboard_users()
     return DashboardAdminsResponse(
         admins=[build_admin_response(admin) for admin in admins],
@@ -156,7 +153,7 @@ def invite_dashboard_admin(
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
     email_sender: Annotated[AuthEmailSender, Depends(get_auth_email_sender)],
 ) -> InviteDashboardAdminResponse:
-    require_owner(current_user)
+    require_owner(current_user, OWNER_ONLY_MESSAGE)
     dashboard_settings = setup_store.get_dashboard_settings()
     token = secrets.token_urlsafe(48)
 

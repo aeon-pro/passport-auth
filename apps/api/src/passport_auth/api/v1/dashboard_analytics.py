@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel
 
-from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user
+from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user, require_owner
 from passport_auth.setup.store import OwnerAccount
 
 router = APIRouter(prefix="/dashboard/analytics", tags=["dashboard-analytics"])
@@ -52,6 +52,7 @@ class AnalyticsSummaryResponse(BaseModel):
 @router.get("/summary")
 def get_analytics_summary(
     request: Request,
-    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
 ) -> AnalyticsSummaryResponse:
+    require_owner(owner)
     return AnalyticsSummaryResponse.model_validate(request.app.state.analytics_reader.summary())

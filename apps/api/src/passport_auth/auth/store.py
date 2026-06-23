@@ -192,6 +192,9 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
+MAX_OTP_ATTEMPTS = 5
+
+
 def normalize_user_metadata(value: dict[str, Any] | None) -> dict[str, Any]:
     if not value:
         return {}
@@ -223,8 +226,8 @@ class InMemoryAuthStore:
         self.users_by_email: dict[str, AuthUser] = {}
         self.auth_codes: dict[str, AuthCode] = {}
         self.refresh_tokens: dict[str, RefreshToken] = {}
-        self.otps: dict[tuple[str, str], tuple[str, int]] = {}
-        self.pending_registrations: dict[str, tuple[PendingRegistration, str]] = {}
+        self.otps: dict[tuple[str, str], tuple[str, int, int]] = {}
+        self.pending_registrations: dict[str, tuple[PendingRegistration, str, int]] = {}
         self.magic_links: dict[str, MagicLink] = {}
         self.oauth_states: dict[str, OAuthState] = {}
 
@@ -429,6 +432,7 @@ class InMemoryAuthStore:
                 expires_at=expires_at,
             ),
             hash_password(otp),
+            0,
         )
 
     def consume_pending_registration(
@@ -443,8 +447,20 @@ class InMemoryAuthStore:
         if not stored:
             return None
 
-        pending_registration, otp_hash = stored
-        if pending_registration.expires_at < now or not verify_password(otp, otp_hash):
+        pending_registration, otp_hash, attempts = stored
+        if pending_registration.expires_at < now:
+            del self.pending_registrations[normalized_email]
+            return None
+        if not verify_password(otp, otp_hash):
+            attempts += 1
+            if attempts >= MAX_OTP_ATTEMPTS:
+                del self.pending_registrations[normalized_email]
+            else:
+                self.pending_registrations[normalized_email] = (
+                    pending_registration,
+                    otp_hash,
+                    attempts,
+                )
             return None
 
         del self.pending_registrations[normalized_email]
@@ -488,15 +504,23 @@ class InMemoryAuthStore:
         return self.refresh_tokens.pop(hash_token(token), None) is not None
 
     def create_otp(self, *, email: str, otp: str, purpose: str, expires_at: int) -> None:
-        self.otps[(email.strip().lower(), purpose)] = (hash_password(otp), expires_at)
+        self.otps[(email.strip().lower(), purpose)] = (hash_password(otp), expires_at, 0)
 
     def consume_otp(self, *, email: str, otp: str, purpose: str, now: int) -> bool:
         key = (email.strip().lower(), purpose)
         stored = self.otps.get(key)
         if not stored:
             return False
-        otp_hash, expires_at = stored
-        if expires_at < now or not verify_password(otp, otp_hash):
+        otp_hash, expires_at, attempts = stored
+        if expires_at < now:
+            del self.otps[key]
+            return False
+        if not verify_password(otp, otp_hash):
+            attempts += 1
+            if attempts >= MAX_OTP_ATTEMPTS:
+                del self.otps[key]
+            else:
+                self.otps[key] = (otp_hash, expires_at, attempts)
             return False
         del self.otps[key]
         return True
@@ -857,6 +881,7 @@ class PostgresAuthStore:
                         code_challenge = EXCLUDED.code_challenge,
                         otp_hash = EXCLUDED.otp_hash,
                         expires_at = EXCLUDED.expires_at,
+                        attempts = 0,
                         created_at = now()
                     """,
                     (
@@ -892,10 +917,12 @@ class PostgresAuthStore:
                         redirect_url,
                         code_challenge,
                         otp_hash,
-                        expires_at
+                        expires_at,
+                        attempts
                     FROM pending_registrations
                     WHERE email = %s
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (normalized_email,),
                 ).fetchone()
@@ -903,8 +930,35 @@ class PostgresAuthStore:
                 if (
                     not row
                     or row[6] < now_datetime
-                    or not verify_password(otp, row[5])
                 ):
+                    if row:
+                        conn.execute(
+                            """
+                            DELETE FROM pending_registrations
+                            WHERE email = %s
+                            """,
+                            (normalized_email,),
+                        )
+                    return None
+
+                if not verify_password(otp, row[5]):
+                    if int(row[7] or 0) + 1 >= MAX_OTP_ATTEMPTS:
+                        conn.execute(
+                            """
+                            DELETE FROM pending_registrations
+                            WHERE email = %s
+                            """,
+                            (normalized_email,),
+                        )
+                    else:
+                        conn.execute(
+                            """
+                            UPDATE pending_registrations
+                            SET attempts = attempts + 1
+                            WHERE email = %s
+                            """,
+                            (normalized_email,),
+                        )
                     return None
 
                 conn.execute(
@@ -962,6 +1016,7 @@ class PostgresAuthStore:
                     FROM auth_codes
                     WHERE code_hash = %s AND consumed_at IS NULL
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (hash_token(code),),
                 ).fetchone()
@@ -1002,6 +1057,7 @@ class PostgresAuthStore:
                     FROM refresh_tokens
                     WHERE token_hash = %s AND revoked_at IS NULL
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (hash_token(token),),
                 ).fetchone()
@@ -1051,17 +1107,36 @@ class PostgresAuthStore:
             with conn.transaction():
                 row = conn.execute(
                     """
-                    SELECT id, otp_hash, expires_at
+                    SELECT id, otp_hash, expires_at, attempts
                     FROM auth_otps
                     WHERE email = %s
                       AND purpose = %s
                       AND consumed_at IS NULL
                     ORDER BY created_at DESC
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (email.strip().lower(), purpose),
                 ).fetchone()
-                if not row or int(row[2].timestamp()) < now or not verify_password(otp, row[1]):
+                if not row:
+                    return False
+                if int(row[2].timestamp()) < now:
+                    conn.execute(
+                        "UPDATE auth_otps SET consumed_at = now() WHERE id = %s",
+                        (row[0],),
+                    )
+                    return False
+                if not verify_password(otp, row[1]):
+                    if int(row[3] or 0) + 1 >= MAX_OTP_ATTEMPTS:
+                        conn.execute(
+                            "UPDATE auth_otps SET consumed_at = now() WHERE id = %s",
+                            (row[0],),
+                        )
+                    else:
+                        conn.execute(
+                            "UPDATE auth_otps SET attempts = attempts + 1 WHERE id = %s",
+                            (row[0],),
+                        )
                     return False
                 conn.execute("UPDATE auth_otps SET consumed_at = now() WHERE id = %s", (row[0],))
         return True
@@ -1104,6 +1179,7 @@ class PostgresAuthStore:
                     FROM magic_links
                     WHERE token_hash = %s AND consumed_at IS NULL
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (hash_token(token),),
                 ).fetchone()
@@ -1153,6 +1229,7 @@ class PostgresAuthStore:
                     FROM oauth_states
                     WHERE state_hash = %s AND consumed_at IS NULL
                     LIMIT 1
+                    FOR UPDATE
                     """,
                     (hash_token(state),),
                 ).fetchone()
@@ -1257,6 +1334,7 @@ class PostgresAuthStore:
                             redirect_url TEXT NOT NULL,
                             code_challenge TEXT NOT NULL,
                             otp_hash TEXT NOT NULL,
+                            attempts INTEGER NOT NULL DEFAULT 0,
                             expires_at TIMESTAMPTZ NOT NULL,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
@@ -1295,10 +1373,23 @@ class PostgresAuthStore:
                             email TEXT NOT NULL,
                             otp_hash TEXT NOT NULL,
                             purpose TEXT NOT NULL,
+                            attempts INTEGER NOT NULL DEFAULT 0,
                             expires_at TIMESTAMPTZ NOT NULL,
                             consumed_at TIMESTAMPTZ,
                             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
                         )
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE pending_registrations
+                        ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0
+                        """
+                    )
+                    conn.execute(
+                        """
+                        ALTER TABLE auth_otps
+                        ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0
                         """
                     )
                     conn.execute(

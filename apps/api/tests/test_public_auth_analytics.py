@@ -10,6 +10,10 @@ from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
+STRONG_ENCRYPTION_KEY = "analytics-encryption-secret-value-32chars"
+STRONG_DASHBOARD_JWT_SECRET = "analytics-dashboard-jwt-secret-32chars"
+STRONG_PUBLIC_JWT_SECRET = "analytics-public-jwt-secret-value-32"
+
 
 def pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode("utf-8")).digest()
@@ -54,8 +58,10 @@ def create_password_login_app(
     )
     app = create_app(
         settings=Settings(
-            app_encryption_key="test-public-auth-analytics-secret",
+            app_encryption_key=STRONG_ENCRYPTION_KEY,
             app_env=app_env,
+            dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
+            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
         ),
         setup_store=setup_store,
         auth_store=auth_store,
@@ -71,7 +77,9 @@ def test_default_analytics_sink_is_clickhouse_only_in_production() -> None:
     production_app = create_app(
         settings=Settings(
             app_env="production",
-            app_encryption_key="test-public-auth-analytics-secret",
+            app_encryption_key=STRONG_ENCRYPTION_KEY,
+            dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
+            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
             clickhouse_url="http://clickhouse:8123/passport_auth",
         ),
         setup_store=setup_store,
@@ -133,6 +141,42 @@ async def test_production_https_public_auth_records_clickhouse_events_only() -> 
     assert analytics_sink.events[0].auth_method == "password"
     assert analytics_sink.events[0].redirect_url == redirect_url
     assert analytics_sink.events[1].user_id == token_response.json()["user"]["id"]
+
+
+@pytest.mark.asyncio
+async def test_public_auth_analytics_hashes_email_and_strips_referrer_secrets() -> None:
+    analytics_sink = RecordingAnalyticsSink()
+    verifier = "correct horse battery staple analytics verifier"
+    redirect_url = "https://app.example.com/auth/callback?next=/billing"
+    app = create_password_login_app(
+        app_env="production",
+        redirect_url=redirect_url,
+        allowed_origin="https://app.example.com",
+        analytics_sink=analytics_sink,
+    )
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        response = await client.post(
+            "/api/v1/auth/password/login",
+            headers={"Referer": "https://auth.example.com/verify?token=magic-link-secret"},
+            json={
+                "email": "user@example.com",
+                "password": "correct-horse-battery-staple",
+                "redirect_url": redirect_url,
+                "code_challenge": pkce_challenge(verifier),
+            },
+        )
+
+    assert response.status_code == 200
+    assert len(analytics_sink.events) == 1
+    event = analytics_sink.events[0]
+    assert event.email != "user@example.com"
+    assert len(event.email) == 64
+    assert event.origin == "https://auth.example.com"
+    assert event.redirect_url == "https://app.example.com/auth/callback"
+    assert "magic-link-secret" not in event.origin
+    assert "next=" not in event.redirect_url
 
 
 @pytest.mark.asyncio

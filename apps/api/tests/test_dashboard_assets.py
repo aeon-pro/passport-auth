@@ -84,4 +84,26 @@ async def test_dashboard_logo_upload_rejects_non_image_files(tmp_path) -> None:
         )
 
     assert response.status_code == 400
-    assert response.json()["detail"] == "Logo must be a PNG, JPG, WebP, or SVG image."
+    assert response.json()["detail"] == "Logo must be a PNG, JPG, or WebP image."
+
+
+@pytest.mark.asyncio
+async def test_dashboard_logo_upload_rejects_svg_files(tmp_path) -> None:
+    transport = ASGITransport(app=create_test_app(tmp_path / "dashboard-assets"))
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        token = await login_owner(client)
+        response = await client.post(
+            "/api/v1/dashboard/assets/logos/primary",
+            headers={"Authorization": f"Bearer {token}"},
+            files={
+                "file": (
+                    "logo.svg",
+                    b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>",
+                    "image/svg+xml",
+                )
+            },
+        )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Logo must be a PNG, JPG, or WebP image."

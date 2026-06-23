@@ -1,4 +1,29 @@
 const TOKEN_KEY = "passport-auth-token";
+const memoryTokenStorage = (() => {
+  let value = null;
+  return {
+    getItem: () => value,
+    setItem: (_key, nextValue) => {
+      value = String(nextValue);
+    },
+    removeItem: () => {
+      value = null;
+    },
+  };
+})();
+function resolveBrowserStorage(name) {
+  try {
+    const storage = window[name];
+    const probeKey = `${TOKEN_KEY}:probe`;
+    storage.setItem(probeKey, "1");
+    storage.removeItem(probeKey);
+    return storage;
+  } catch {
+    return null;
+  }
+}
+const tokenStorage = resolveBrowserStorage("sessionStorage") || memoryTokenStorage;
+resolveBrowserStorage("localStorage")?.removeItem(TOKEN_KEY);
 const app = document.querySelector("#app");
 const defaultTemplateColor = "#f5f5f7";
 const defaultBlockedMessage = "This account is blocked. Contact support for more help.";
@@ -116,7 +141,7 @@ const state = {
   analyticsLoading: false,
   analyticsError: "",
   settingsLoading: false,
-  token: localStorage.getItem(TOKEN_KEY),
+  token: tokenStorage.getItem(TOKEN_KEY),
   authMode: "login",
   onboardingStep: 0,
   onboarding: { ...defaultOnboarding, email_templates: cloneEmailTemplates() },
@@ -417,7 +442,7 @@ function renderLogoUploadField({ label, name, hiddenName, currentUrl, fallbackTe
   return `
     <label class="logo-upload-card">
       <input name="${escapeHtml(hiddenName)}" type="hidden" value="${escapeHtml(currentUrl || "")}" />
-      <input name="${escapeHtml(name)}" type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" />
+      <input name="${escapeHtml(name)}" type="file" accept="image/png,image/jpeg,image/webp" />
       <span class="logo-upload-preview" aria-hidden="true">
         ${renderLogoPreview(currentUrl, fallbackText)}
       </span>
@@ -741,7 +766,7 @@ async function loadProfile() {
   try {
     state.user = await api("/api/v1/dashboard/auth/me");
   } catch {
-    localStorage.removeItem(TOKEN_KEY);
+    tokenStorage.removeItem(TOKEN_KEY);
     state.token = null;
     state.user = null;
   }
@@ -870,7 +895,7 @@ async function loadAdmins({ quiet = false } = {}) {
 }
 
 function setupComplete() {
-  return Boolean(state.setup?.setup_complete && state.setup?.owner);
+  return Boolean(state.setup?.setup_complete);
 }
 
 function currentPath() {
@@ -3051,7 +3076,7 @@ async function completeOnboarding() {
     });
     state.token = login.access_token;
     state.user = login.user;
-    localStorage.setItem(TOKEN_KEY, state.token);
+    tokenStorage.setItem(TOKEN_KEY, state.token);
     const settingsPayload = buildSettingsPayload();
     await applyOnboardingLogoUploads(settingsPayload);
     state.settings = await api("/api/v1/dashboard/settings", {
@@ -3116,7 +3141,7 @@ async function handleLoginSubmit(form) {
     });
     state.token = login.access_token;
     state.user = login.user;
-    localStorage.setItem(TOKEN_KEY, state.token);
+    tokenStorage.setItem(TOKEN_KEY, state.token);
     await loadSettings({ quiet: true });
     window.history.replaceState({}, "", "/");
   } catch (error) {
@@ -3808,7 +3833,7 @@ app.addEventListener("click", (event) => {
   }
 
   if (action === "sign-out") {
-    localStorage.removeItem(TOKEN_KEY);
+    tokenStorage.removeItem(TOKEN_KEY);
     state.token = null;
     state.user = null;
     state.settings = null;

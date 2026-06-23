@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 
 from passport_auth.core.config import Settings
+from passport_auth.core.rate_limit import RateLimiter, rate_limit_client
 from passport_auth.dashboard.tokens import (
     InvalidTokenError,
     create_dashboard_token,
@@ -15,6 +16,7 @@ from passport_auth.setup.passwords import verify_password
 from passport_auth.setup.store import OwnerAccount, SetupStore
 
 router = APIRouter(prefix="/dashboard/auth", tags=["dashboard-auth"])
+RATE_LIMIT_DETAIL = "Too many authentication attempts. Try again later."
 
 
 class DashboardUserResponse(BaseModel):
@@ -75,6 +77,26 @@ def get_setup_store(request: Request) -> SetupStore:
     return request.app.state.setup_store
 
 
+def get_rate_limiter(request: Request) -> RateLimiter:
+    return request.app.state.rate_limiter
+
+
+def enforce_dashboard_rate_limit(
+    *,
+    request: Request,
+    rate_limiter: RateLimiter,
+    scope: str,
+    subject: str,
+    limit: int,
+    window_seconds: int,
+) -> None:
+    client_host = request.client.host if request.client else None
+    client = rate_limit_client(request.headers, client_host)
+    key = f"dashboard-auth:{scope}:{client}:{subject.strip().lower()}"
+    if not rate_limiter.hit(key, limit=limit, window_seconds=window_seconds):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=RATE_LIMIT_DETAIL)
+
+
 def build_dashboard_user(owner: OwnerAccount) -> DashboardUserResponse:
     return DashboardUserResponse(email=owner.email, role=owner.role)
 
@@ -90,7 +112,7 @@ def get_current_dashboard_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
 
     try:
-        payload = decode_dashboard_token(token, secret=settings.app_encryption_key)
+        payload = decode_dashboard_token(token, secret=settings.resolved_dashboard_jwt_secret)
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -104,12 +126,33 @@ def get_current_dashboard_user(
     return owner
 
 
+def require_owner(
+    user: OwnerAccount,
+    detail: str = "Only the owner can manage this dashboard resource.",
+) -> None:
+    if user.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=detail,
+        )
+
+
 @router.post("/login")
 def login(
+    request: Request,
     payload: LoginRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> LoginResponse:
+    enforce_dashboard_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="login",
+        subject=payload.email,
+        limit=5,
+        window_seconds=300,
+    )
     owner = setup_store.get_dashboard_user_by_email(payload.email)
     if (
         not owner
@@ -124,7 +167,7 @@ def login(
     token = create_dashboard_token(
         email=owner.email,
         role=owner.role,
-        secret=settings.app_encryption_key,
+        secret=settings.resolved_dashboard_jwt_secret,
         ttl_seconds=settings.dashboard_jwt_ttl_seconds,
     )
     return LoginResponse(
@@ -136,9 +179,11 @@ def login(
 
 @router.post("/password-reset/start")
 def start_password_reset(
+    request: Request,
     payload: PasswordResetStartRequest,
     settings: Annotated[Settings, Depends(get_settings)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> PasswordResetStartResponse:
     dashboard_settings = setup_store.get_dashboard_settings()
     if not settings.password_reset_otp_enabled or not dashboard_settings.password_reset_otp_enabled:
@@ -146,6 +191,14 @@ def start_password_reset(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Password reset is disabled.",
         )
+    enforce_dashboard_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="password-reset-start",
+        subject=payload.email,
+        limit=3,
+        window_seconds=900,
+    )
 
     owner = setup_store.get_dashboard_user_by_email(payload.email)
     if not owner:
@@ -166,9 +219,19 @@ def start_password_reset(
 
 @router.post("/password-reset/confirm")
 def confirm_password_reset(
+    request: Request,
     payload: PasswordResetConfirmRequest,
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    rate_limiter: Annotated[RateLimiter, Depends(get_rate_limiter)],
 ) -> OkResponse:
+    enforce_dashboard_rate_limit(
+        request=request,
+        rate_limiter=rate_limiter,
+        scope="password-reset-confirm",
+        subject=payload.email,
+        limit=10,
+        window_seconds=600,
+    )
     owner = setup_store.get_dashboard_user_by_email(payload.email)
     if not owner:
         raise HTTPException(

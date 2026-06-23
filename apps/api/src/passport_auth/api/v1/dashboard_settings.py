@@ -4,7 +4,11 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
 
-from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user, get_setup_store
+from passport_auth.api.v1.dashboard_auth import (
+    get_current_dashboard_user,
+    get_setup_store,
+    require_owner,
+)
 from passport_auth.setup.store import (
     DashboardSettings,
     EmailTemplate,
@@ -169,9 +173,10 @@ def build_branding_response(settings: DashboardSettings) -> DashboardBrandingRes
 
 @router.get("")
 def get_dashboard_settings(
-    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> DashboardSettingsResponse:
+    require_owner(owner)
     return build_settings_response(setup_store.get_dashboard_settings())
 
 
@@ -185,9 +190,10 @@ def get_dashboard_branding(
 @router.put("")
 def update_dashboard_settings(
     payload: DashboardSettingsUpdate,
-    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
 ) -> DashboardSettingsResponse:
+    require_owner(owner)
     current = setup_store.get_dashboard_settings()
     updates = payload.model_dump(exclude_unset=True)
 

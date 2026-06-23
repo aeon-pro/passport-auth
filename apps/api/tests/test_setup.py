@@ -35,7 +35,7 @@ async def test_owner_setup_creates_owner_and_hashes_password() -> None:
     }
     assert status_response.json() == {
         "setup_complete": True,
-        "owner": {"email": "owner@example.com"},
+        "owner": None,
     }
     assert setup_store.owner is not None
     assert setup_store.owner.password_hash.startswith("pbkdf2_sha256$")

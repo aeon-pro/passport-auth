@@ -7,6 +7,10 @@ from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
+STRONG_ENCRYPTION_KEY = "dashboard-admins-encryption-secret32"
+STRONG_DASHBOARD_JWT_SECRET = "dashboard-admins-dashboard-jwt-key"
+STRONG_PUBLIC_JWT_SECRET = "dashboard-admins-public-jwt-secret"
+
 
 class CapturingEmailSender:
     def __init__(self) -> None:
@@ -57,7 +61,12 @@ def create_admins_app() -> tuple[InMemorySetupStore, CapturingEmailSender, objec
     )
     email_sender = CapturingEmailSender()
     app = create_app(
-        settings=Settings(app_env="production", app_encryption_key="test-admin-secret"),
+        settings=Settings(
+            app_env="production",
+            app_encryption_key=STRONG_ENCRYPTION_KEY,
+            dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
+            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+        ),
         setup_store=setup_store,
         auth_email_sender=email_sender,
     )

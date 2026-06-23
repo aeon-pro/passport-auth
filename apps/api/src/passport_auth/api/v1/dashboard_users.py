@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 
-from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user
+from passport_auth.api.v1.dashboard_auth import get_current_dashboard_user, require_owner
 from passport_auth.auth.store import AuthStore, AuthUser, AuthUserAlreadyExistsError
 from passport_auth.setup.store import OwnerAccount
 
@@ -112,12 +112,13 @@ def build_user_response(user: AuthUser) -> DashboardUserResponse:
 
 @router.get("")
 def list_dashboard_users(
-    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
     query: str = Query(default="", max_length=120),
     limit: int = Query(default=100, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> DashboardUsersResponse:
+    require_owner(owner)
     users, total = auth_store.list_users(query=query, limit=limit, offset=offset)
     return DashboardUsersResponse(
         users=[build_user_response(user) for user in users],
@@ -129,9 +130,10 @@ def list_dashboard_users(
 def update_dashboard_user(
     user_id: str,
     payload: DashboardUserUpdate,
-    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
 ) -> DashboardUserResponse:
+    require_owner(owner)
     updates = payload.model_dump(exclude_unset=True)
     try:
         user = auth_store.update_user(user_id=user_id, **updates)
@@ -150,9 +152,10 @@ def update_dashboard_user(
 @router.delete("/{user_id}")
 def delete_dashboard_user(
     user_id: str,
-    _owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
+    owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     auth_store: Annotated[AuthStore, Depends(get_auth_store)],
 ) -> OkResponse:
+    require_owner(owner)
     if not auth_store.delete_user(user_id=user_id):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
 

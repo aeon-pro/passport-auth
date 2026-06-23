@@ -15,6 +15,7 @@ dependencies = [
   "pydantic-settings>=2.7.0",
   "python-multipart>=0.0.20",
   "psycopg[binary]>=3.2.0",
+  "redis>=5.2.0",
   "uvicorn[standard]>=0.34.0",
 ]
 
