@@ -227,6 +227,12 @@ const authMethodLabels = {
   google_oauth_enabled: "Google OAuth",
   password_reset_otp_enabled: "Password reset OTP",
 };
+const signInMethodKeys = [
+  "password_login_enabled",
+  "otp_login_enabled",
+  "magic_link_enabled",
+  "google_oauth_enabled",
+];
 
 const userRoleOptions = [
   { value: "user", label: "User" },
@@ -1371,9 +1377,7 @@ function renderOnboardingFields(stepIndex) {
 
 function renderOnboardingReview() {
   const data = state.onboarding;
-  const methods = Object.entries(authMethodLabels)
-    .filter(([key]) => data[key])
-    .map(([, label]) => label);
+  const methods = signInMethodKeys.filter((key) => data[key]).map((key) => authMethodLabels[key]);
   const urls = [
     data.app_domain || "Application domain not set",
     data.auth_domain || "Auth domain not set",
@@ -1998,7 +2002,7 @@ function renderHostedAuthContent(path, context) {
 
 function dashboardMetrics() {
   const settings = state.settings || {};
-  const enabledMethods = Object.keys(authMethodLabels).filter((key) => settings[key]);
+  const enabledMethods = signInMethodKeys.filter((key) => settings[key]);
   const domainCount = [
     settings.app_domain,
     settings.auth_domain,
@@ -2018,7 +2022,7 @@ function dashboardMetrics() {
 function renderDashboardEvents(settings = {}, users = []) {
   const blockedUsers = users.filter((user) => user.is_blocked).length;
   const redirectCount = (settings.redirect_urls || []).length;
-  const enabledMethods = Object.keys(authMethodLabels)
+  const enabledMethods = signInMethodKeys
     .filter((key) => settings[key])
     .map((key) => authMethodLabels[key]);
   const events = [
@@ -3008,9 +3012,9 @@ function validateOnboardingStep(stepIndex) {
   }
 
   if (stepIndex === 3) {
-    const hasMethod = Object.keys(authMethodLabels).some((key) => state.onboarding[key]);
+    const hasMethod = signInMethodKeys.some((key) => state.onboarding[key]);
     if (!hasMethod) {
-      return "Enable at least one auth method.";
+      return "Enable at least one sign-in method.";
     }
   }
 

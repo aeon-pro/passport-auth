@@ -32,7 +32,7 @@ def test_static_dashboard_uses_dark_studio_workspace_design() -> None:
     h2_body = css_rule_body(styles_css, "h2")
 
     assert "passport-auth-ui-version" in index_html
-    assert "2026-06-18-single-sidebar" in index_html
+    assert "2026-06-26-toggle-ui" in index_html
     assert "workspace-rail" not in app_js
     assert "rail-nav" not in app_js
     assert "workspace-sidebar" in app_js

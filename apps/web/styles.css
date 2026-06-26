@@ -3025,12 +3025,13 @@ h2,
 .toggle-control::after {
   width: 14px;
   height: 14px;
-  top: 2px;
+  top: 50%;
   left: 2px;
+  transform: translateY(-50%);
 }
 
 .toggle-row input:checked + .toggle-control::after {
-  transform: translateX(16px);
+  transform: translate(16px, -50%);
 }
 
 .overview-card,
