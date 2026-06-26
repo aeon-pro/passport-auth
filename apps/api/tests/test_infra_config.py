@@ -9,16 +9,19 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     compose = (ROOT / "docker-compose.yaml").read_text(encoding="utf-8")
     env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    entrypoint = (ROOT / "scripts" / "docker-entrypoint.sh").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
     assert "APP_ENV=${APP_ENV:-production}" in compose
     assert "APP_ENV=development" in env_example
     assert "profiles:" not in compose
-    assert "DATABASE_URL=${DATABASE_URL:-postgresql://" in compose
-    assert "${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_64_POSTGRES:-}}@postgres:5432/" in compose
+    assert "DATABASE_URL=" not in compose
+    assert "DATABASE_URL=" in entrypoint
+    assert "SERVICE_PASSWORD_64_POSTGRES" in entrypoint
     assert "REDIS_URL=${REDIS_URL:-redis://redis:6379/0}" in compose
-    assert "CLICKHOUSE_URL=${CLICKHOUSE_URL:-http://" in compose
-    assert "${CLICKHOUSE_PASSWORD:-${SERVICE_PASSWORD_64_CLICKHOUSE:-}}@clickhouse:8123/" in compose
+    assert "CLICKHOUSE_URL=" not in compose
+    assert "CLICKHOUSE_URL=" in entrypoint
+    assert "SERVICE_PASSWORD_64_CLICKHOUSE" in entrypoint
     assert "postgres:\n        condition: service_healthy" in compose
     assert "redis:\n        condition: service_healthy" in compose
     assert "clickhouse:\n        condition: service_healthy" in compose
@@ -26,40 +29,39 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "expose:\n      - \"8000\"" in compose
     assert "DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}" in compose
     assert "dashboard-assets:/app/data/dashboard-assets" in compose
-    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_postgres-data" in compose
-    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_redis-data" in compose
-    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_clickhouse-data" in compose
-    assert "name: ${PASSPORT_AUTH_VOLUME_PREFIX:-passport-auth}_dashboard-assets" in compose
+    assert "name: passport-auth_postgres-data" in compose
+    assert "name: passport-auth_redis-data" in compose
+    assert "name: passport-auth_clickhouse-data" in compose
+    assert "name: passport-auth_dashboard-assets" in compose
     assert "DASHBOARD_ASSET_DIR=/app/data/dashboard-assets" in env_example
-    assert "PASSPORT_AUTH_VOLUME_PREFIX=passport-auth" in env_example
     assert "DASHBOARD_ASSET_DIR=/app/data/dashboard-assets" in dockerfile
+    assert "ENTRYPOINT [\"passport-auth-entrypoint\"]" in dockerfile
+    assert "- APP_ENCRYPTION_KEY=" not in compose
+    assert "- DASHBOARD_JWT_SECRET=" not in compose
+    assert "- PUBLIC_JWT_SECRET=" not in compose
     assert (
-        "APP_ENCRYPTION_KEY=${APP_ENCRYPTION_KEY:-"
-        "${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-}}"
+        "SERVICE_BASE64_64_APP_ENCRYPTION_KEY=${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-}"
         in compose
     )
-    assert (
-        "DASHBOARD_JWT_SECRET=${DASHBOARD_JWT_SECRET:-"
-        "${SERVICE_BASE64_64_DASHBOARD_JWT_SECRET:-}}"
-        in compose
-    )
-    assert (
-        "PUBLIC_JWT_SECRET=${PUBLIC_JWT_SECRET:-${SERVICE_BASE64_64_PUBLIC_JWT_SECRET:-}}"
-        in compose
-    )
+    assert "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET" in compose
+    assert "SERVICE_BASE64_64_PUBLIC_JWT_SECRET" in compose
     assert "DASHBOARD_JWT_TTL_SECONDS=${DASHBOARD_JWT_TTL_SECONDS:-28800}" in compose
     assert "must be set" not in compose
-    assert "POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${SERVICE_PASSWORD_64_POSTGRES:-}}" in compose
-    assert (
-        "CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-${SERVICE_PASSWORD_64_CLICKHOUSE:-}}"
-        in compose
-    )
+    assert "POSTGRES_PASSWORD:" not in compose
+    assert "POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password" in compose
+    assert "CLICKHOUSE_PASSWORD:" not in compose
+    assert "from_env=\"SERVICE_PASSWORD_64_CLICKHOUSE\"" in (
+        ROOT / "deploy" / "clickhouse" / "users.d" / "passport-user.xml"
+    ).read_text(encoding="utf-8")
+    assert "environment: SERVICE_PASSWORD_64_POSTGRES" in compose
     assert "python3 scripts/generate-env.py" in readme
-    assert "DASHBOARD_JWT_SECRET=replace-with-a-different-32-byte-minimum-secret" in env_example
-    assert "PUBLIC_JWT_SECRET=replace-with-another-32-byte-minimum-secret" in env_example
+    assert "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET=" in env_example
+    assert "SERVICE_BASE64_64_PUBLIC_JWT_SECRET=" in env_example
     assert "DASHBOARD_JWT_TTL_SECONDS=28800" in env_example
-    assert "POSTGRES_PASSWORD=replace-with-a-strong-postgres-password" in env_example
-    assert "CLICKHOUSE_PASSWORD=replace-with-a-strong-clickhouse-password" in env_example
+    assert "SERVICE_PASSWORD_64_POSTGRES=" in env_example
+    assert "SERVICE_PASSWORD_64_CLICKHOUSE=" in env_example
+    assert "POSTGRES_PASSWORD=" not in env_example
+    assert "CLICKHOUSE_PASSWORD=" not in env_example
     assert "DATABASE_URL=" not in env_example
     assert "CLICKHOUSE_URL=" not in env_example
 
@@ -80,11 +82,11 @@ def test_generate_env_script_writes_secure_random_values(tmp_path) -> None:
         if line and not line.startswith("#")
     )
     generated_keys = [
-        "APP_ENCRYPTION_KEY",
-        "DASHBOARD_JWT_SECRET",
-        "PUBLIC_JWT_SECRET",
-        "POSTGRES_PASSWORD",
-        "CLICKHOUSE_PASSWORD",
+        "SERVICE_BASE64_64_APP_ENCRYPTION_KEY",
+        "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET",
+        "SERVICE_BASE64_64_PUBLIC_JWT_SECRET",
+        "SERVICE_PASSWORD_64_POSTGRES",
+        "SERVICE_PASSWORD_64_CLICKHOUSE",
     ]
 
     assert output.stat().st_mode & 0o077 == 0

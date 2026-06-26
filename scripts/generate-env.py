@@ -20,33 +20,32 @@ def random_secret(length: int = SECRET_LENGTH) -> str:
 def build_env(*, app_env: str) -> str:
     values = {
         "APP_ENV": app_env,
-        "APP_ENCRYPTION_KEY": random_secret(),
-        "DASHBOARD_JWT_SECRET": random_secret(),
-        "PUBLIC_JWT_SECRET": random_secret(),
+        "SERVICE_BASE64_64_APP_ENCRYPTION_KEY": random_secret(),
+        "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET": random_secret(),
+        "SERVICE_BASE64_64_PUBLIC_JWT_SECRET": random_secret(),
         "DASHBOARD_JWT_TTL_SECONDS": "28800",
         "DASHBOARD_ASSET_DIR": "/app/data/dashboard-assets",
-        "PASSPORT_AUTH_VOLUME_PREFIX": "passport-auth",
-        "POSTGRES_DB": "passport_auth",
-        "POSTGRES_USER": "passport",
-        "POSTGRES_PASSWORD": random_secret(),
+        "SERVICE_PASSWORD_64_POSTGRES": random_secret(),
         "REDIS_URL": "redis://redis:6379/0",
-        "CLICKHOUSE_DB": "passport_auth",
-        "CLICKHOUSE_USER": "passport",
-        "CLICKHOUSE_PASSWORD": random_secret(),
+        "SERVICE_PASSWORD_64_CLICKHOUSE": random_secret(),
     }
     sections = [
         ("Runtime", ["APP_ENV"]),
         (
             "Application secrets",
-            ["APP_ENCRYPTION_KEY", "DASHBOARD_JWT_SECRET", "PUBLIC_JWT_SECRET"],
+            [
+                "SERVICE_BASE64_64_APP_ENCRYPTION_KEY",
+                "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET",
+                "SERVICE_BASE64_64_PUBLIC_JWT_SECRET",
+            ],
         ),
         (
             "Dashboard",
-            ["DASHBOARD_JWT_TTL_SECONDS", "DASHBOARD_ASSET_DIR", "PASSPORT_AUTH_VOLUME_PREFIX"],
+            ["DASHBOARD_JWT_TTL_SECONDS", "DASHBOARD_ASSET_DIR"],
         ),
-        ("Postgres", ["POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD"]),
+        ("Postgres", ["SERVICE_PASSWORD_64_POSTGRES"]),
         ("Redis", ["REDIS_URL"]),
-        ("ClickHouse", ["CLICKHOUSE_DB", "CLICKHOUSE_USER", "CLICKHOUSE_PASSWORD"]),
+        ("ClickHouse", ["SERVICE_PASSWORD_64_CLICKHOUSE"]),
     ]
 
     lines = [

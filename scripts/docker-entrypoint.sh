@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+
+export APP_ENV="${APP_ENV:-production}"
+export WEB_STATIC_DIR="${WEB_STATIC_DIR:-/app/static}"
+export DASHBOARD_ASSET_DIR="${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}"
+export DASHBOARD_JWT_TTL_SECONDS="${DASHBOARD_JWT_TTL_SECONDS:-28800}"
+export REDIS_URL="${REDIS_URL:-redis://redis:6379/0}"
+
+export APP_ENCRYPTION_KEY="${APP_ENCRYPTION_KEY:-${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-}}"
+export DASHBOARD_JWT_SECRET="${DASHBOARD_JWT_SECRET:-${SERVICE_BASE64_64_DASHBOARD_JWT_SECRET:-}}"
+export PUBLIC_JWT_SECRET="${PUBLIC_JWT_SECRET:-${SERVICE_BASE64_64_PUBLIC_JWT_SECRET:-}}"
+
+export DATABASE_URL="${DATABASE_URL:-postgresql://passport:${SERVICE_PASSWORD_64_POSTGRES:-}@postgres:5432/passport_auth}"
+export CLICKHOUSE_URL="${CLICKHOUSE_URL:-http://passport:${SERVICE_PASSWORD_64_CLICKHOUSE:-}@clickhouse:8123/passport_auth}"
+
+exec "$@"

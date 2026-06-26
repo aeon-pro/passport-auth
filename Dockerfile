@@ -15,7 +15,10 @@ RUN python -m pip install --no-cache-dir --upgrade pip \
     && python -m pip install --no-cache-dir ./apps/api
 
 COPY apps/web ./static
+COPY scripts/docker-entrypoint.sh /usr/local/bin/passport-auth-entrypoint
+RUN chmod +x /usr/local/bin/passport-auth-entrypoint
 
 EXPOSE 8000
 
+ENTRYPOINT ["passport-auth-entrypoint"]
 CMD ["python", "-m", "uvicorn", "passport_auth.main:app", "--host", "0.0.0.0", "--port", "8000"]

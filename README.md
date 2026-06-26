@@ -103,20 +103,20 @@ default.
 For production, change these values in Coolify instead of relying on the development defaults:
 
 - `APP_ENV=production`
-- `APP_ENCRYPTION_KEY`, kept stable across deploys because it encrypts provider secrets
-- `DASHBOARD_JWT_SECRET`, a separate stable secret for dashboard sessions
-- `PUBLIC_JWT_SECRET`, a separate stable secret for public auth access tokens
-- `POSTGRES_PASSWORD`
-- `CLICKHOUSE_PASSWORD`
+- `SERVICE_BASE64_64_APP_ENCRYPTION_KEY`, kept stable across deploys because it encrypts provider secrets
+- `SERVICE_BASE64_64_DASHBOARD_JWT_SECRET`, a separate stable secret for dashboard sessions
+- `SERVICE_BASE64_64_PUBLIC_JWT_SECRET`, a separate stable secret for public auth access tokens
+- `SERVICE_PASSWORD_64_POSTGRES`
+- `SERVICE_PASSWORD_64_CLICKHOUSE`
 - `DATABASE_URL`, `CLICKHOUSE_URL`, or `REDIS_URL` only if you use external services
 - `DASHBOARD_JWT_TTL_SECONDS`, defaults to `28800` for 8-hour dashboard sessions
 - `DASHBOARD_ASSET_DIR`, defaults to `/app/data/dashboard-assets` in Compose and is mounted
   to the `dashboard-assets` volume for uploaded logos
 
-On Coolify, the Compose file auto-generates those app/database values with Coolify magic
-variables (`SERVICE_BASE64_64_*` and `SERVICE_PASSWORD_64_*`) when you do not set them yourself.
-The generated values are stable across redeploys and shared between services. Production startup
-still rejects empty or placeholder app secrets.
+On Coolify, the Compose file uses magic variables (`SERVICE_BASE64_64_*` and
+`SERVICE_PASSWORD_64_*`) for app/database secrets. Coolify generates these values once, keeps them
+stable across redeploys, and shares them between services. The web container maps them to the app's
+runtime settings during startup, and production startup still rejects empty app secrets.
 
 The exposed web service still listens on container port `8000`.
 
