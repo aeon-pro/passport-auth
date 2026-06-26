@@ -15,6 +15,9 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "APP_ENV=${APP_ENV:-production}" in compose
     assert "APP_ENV=development" in env_example
     assert "profiles:" not in compose
+    assert "secrets-init:" in compose
+    assert "runtime-secrets:/run/passport-auth-secrets" in compose
+    assert "condition: service_completed_successfully" in compose
     assert "DATABASE_URL=" not in compose
     assert "DATABASE_URL=" in entrypoint
     assert "SERVICE_PASSWORD_64_POSTGRES" in entrypoint
@@ -33,6 +36,7 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "name: passport-auth_redis-data" in compose
     assert "name: passport-auth_clickhouse-data" in compose
     assert "name: passport-auth_dashboard-assets" in compose
+    assert "name: passport-auth_runtime-secrets" in compose
     assert "DASHBOARD_ASSET_DIR=/app/data/dashboard-assets" in env_example
     assert "DASHBOARD_ASSET_DIR=/app/data/dashboard-assets" in dockerfile
     assert "ENTRYPOINT [\"passport-auth-entrypoint\"]" in dockerfile
@@ -48,12 +52,13 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "DASHBOARD_JWT_TTL_SECONDS=${DASHBOARD_JWT_TTL_SECONDS:-28800}" in compose
     assert "must be set" not in compose
     assert "POSTGRES_PASSWORD:" not in compose
-    assert "POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password" in compose
+    assert "POSTGRES_PASSWORD_FILE: /run/passport-auth-secrets/postgres_password" in compose
     assert "CLICKHOUSE_PASSWORD:" not in compose
+    assert "`cat /run/passport-auth-secrets/clickhouse_password`" in compose
     assert "from_env=\"SERVICE_PASSWORD_64_CLICKHOUSE\"" in (
         ROOT / "deploy" / "clickhouse" / "users.d" / "passport-user.xml"
     ).read_text(encoding="utf-8")
-    assert "environment: SERVICE_PASSWORD_64_POSTGRES" in compose
+    assert "runtime_secret_generator:" in compose
     assert "python3 scripts/generate-env.py" in readme
     assert "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET=" in env_example
     assert "SERVICE_BASE64_64_PUBLIC_JWT_SECRET=" in env_example
@@ -94,6 +99,51 @@ def test_generate_env_script_writes_secure_random_values(tmp_path) -> None:
     for key in generated_keys:
         assert len(values[key]) == 64
         assert values[key].isalnum()
+
+
+def test_runtime_secret_generator_writes_stable_secret_files(tmp_path) -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "generate-runtime-secrets.py"),
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    original_values = {
+        path.name: path.read_text(encoding="utf-8").strip()
+        for path in tmp_path.iterdir()
+    }
+
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts" / "generate-runtime-secrets.py"),
+            str(tmp_path),
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    next_values = {
+        path.name: path.read_text(encoding="utf-8").strip()
+        for path in tmp_path.iterdir()
+    }
+
+    assert set(original_values) == {
+        "app_encryption_key",
+        "dashboard_jwt_secret",
+        "public_jwt_secret",
+        "postgres_password",
+        "clickhouse_password",
+    }
+    assert next_values == original_values
+    assert len(set(original_values.values())) == len(original_values)
+    for value in original_values.values():
+        assert len(value) == 64
+        assert value.isalnum()
 
 
 def test_dashboard_app_uses_session_storage_for_dashboard_tokens() -> None:

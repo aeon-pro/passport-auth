@@ -100,23 +100,20 @@ Use `docker-compose.yaml` as the Docker Compose file. It deploys the web service
 Redis, and ClickHouse together, and the web service is wired to the internal service URLs by
 default.
 
-For production, change these values in Coolify instead of relying on the development defaults:
+For production, set these values in Coolify only if you need to override the bundled defaults:
 
 - `APP_ENV=production`
-- `SERVICE_BASE64_64_APP_ENCRYPTION_KEY`, kept stable across deploys because it encrypts provider secrets
-- `SERVICE_BASE64_64_DASHBOARD_JWT_SECRET`, a separate stable secret for dashboard sessions
-- `SERVICE_BASE64_64_PUBLIC_JWT_SECRET`, a separate stable secret for public auth access tokens
-- `SERVICE_PASSWORD_64_POSTGRES`
-- `SERVICE_PASSWORD_64_CLICKHOUSE`
-- `DATABASE_URL`, `CLICKHOUSE_URL`, or `REDIS_URL` only if you use external services
+- `REDIS_URL` only if you use an external Redis service
 - `DASHBOARD_JWT_TTL_SECONDS`, defaults to `28800` for 8-hour dashboard sessions
 - `DASHBOARD_ASSET_DIR`, defaults to `/app/data/dashboard-assets` in Compose and is mounted
   to the `dashboard-assets` volume for uploaded logos
 
-On Coolify, the Compose file uses magic variables (`SERVICE_BASE64_64_*` and
-`SERVICE_PASSWORD_64_*`) for app/database secrets. Coolify generates these values once, keeps them
-stable across redeploys, and shares them between services. The web container maps them to the app's
-runtime settings during startup, and production startup still rejects empty app secrets.
+The bundled Compose stack auto-generates app and database secrets on first startup in the
+`passport-auth_runtime-secrets` Docker volume. The web container maps those files to
+`APP_ENCRYPTION_KEY`, `DASHBOARD_JWT_SECRET`, `PUBLIC_JWT_SECRET`, `DATABASE_URL`, and
+`CLICKHOUSE_URL` at startup. Keep the runtime secrets volume with the Postgres and ClickHouse
+volumes; deleting only the secrets volume while keeping database volumes will break existing
+database passwords.
 
 The exposed web service still listens on container port `8000`.
 
@@ -127,8 +124,4 @@ suffix:
 - `passport-auth_redis-data`
 - `passport-auth_clickhouse-data`
 - `passport-auth_dashboard-assets`
-
-If you already deployed before this stable-volume change and need to keep existing data, set
-`PASSPORT_AUTH_VOLUME_PREFIX` to the existing Coolify volume prefix before redeploying. For
-example, a volume named `pyg7d629exdub1na7gtykje6_postgres-data` needs
-`PASSPORT_AUTH_VOLUME_PREFIX=pyg7d629exdub1na7gtykje6`.
+- `passport-auth_runtime-secrets`

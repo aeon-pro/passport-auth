@@ -1,6 +1,16 @@
 name: passport-auth
 
 services:
+  secrets-init:
+    image: python:3.13-slim
+    command: ["python", "/usr/local/bin/generate-runtime-secrets.py", "/run/passport-auth-secrets"]
+    volumes:
+      - runtime-secrets:/run/passport-auth-secrets
+    configs:
+      - source: runtime_secret_generator
+        target: /usr/local/bin/generate-runtime-secrets.py
+    restart: "no"
+
   web:
     build:
       context: .
@@ -20,7 +30,10 @@ services:
       - "8000"
     volumes:
       - dashboard-assets:/app/data/dashboard-assets
+      - runtime-secrets:/run/passport-auth-secrets:ro
     depends_on:
+      secrets-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -33,11 +46,13 @@ services:
     environment:
       POSTGRES_DB: passport_auth
       POSTGRES_USER: passport
-      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_PASSWORD_FILE: /run/passport-auth-secrets/postgres_password
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    secrets:
-      - postgres_password
+      - runtime-secrets:/run/passport-auth-secrets:ro
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -61,22 +76,35 @@ services:
       CLICKHOUSE_DB: passport_auth
       SERVICE_PASSWORD_64_CLICKHOUSE: ${SERVICE_PASSWORD_64_CLICKHOUSE:-}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        export SERVICE_PASSWORD_64_CLICKHOUSE="`cat /run/passport-auth-secrets/clickhouse_password`"
+        exec /entrypoint.sh "$$@"
+      - clickhouse-entrypoint
     volumes:
       - clickhouse-data:/var/lib/clickhouse
+      - runtime-secrets:/run/passport-auth-secrets:ro
     configs:
       - source: clickhouse_passport_user
         target: /etc/clickhouse-server/users.d/passport-user.xml
+    depends_on:
+      secrets-init:
+        condition: service_completed_successfully
     healthcheck:
       test:
         [
           "CMD-SHELL",
-          "clickhouse-client --user passport --password \"$${SERVICE_PASSWORD_64_CLICKHOUSE}\" --query 'SELECT 1'",
+          "clickhouse-client --user passport --password \"`cat /run/passport-auth-secrets/clickhouse_password`\" --query 'SELECT 1'",
         ]
       interval: 10s
       timeout: 5s
       retries: 12
 
 volumes:
+  runtime-secrets:
+    name: passport-auth_runtime-secrets
   postgres-data:
     name: passport-auth_postgres-data
   redis-data:
@@ -86,10 +114,8 @@ volumes:
   dashboard-assets:
     name: passport-auth_dashboard-assets
 
-secrets:
-  postgres_password:
-    environment: SERVICE_PASSWORD_64_POSTGRES
-
 configs:
+  runtime_secret_generator:
+    file: ./scripts/generate-runtime-secrets.py
   clickhouse_passport_user:
     file: ./deploy/clickhouse/users.d/passport-user.xml
