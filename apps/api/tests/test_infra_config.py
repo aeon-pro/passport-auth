@@ -55,10 +55,9 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "POSTGRES_PASSWORD_FILE: /run/passport-auth-secrets/postgres_password" in compose
     assert "CLICKHOUSE_PASSWORD:" not in compose
     assert "`cat /run/passport-auth-secrets/clickhouse_password`" in compose
-    assert "from_env=\"SERVICE_PASSWORD_64_CLICKHOUSE\"" in (
-        ROOT / "deploy" / "clickhouse" / "users.d" / "passport-user.xml"
-    ).read_text(encoding="utf-8")
-    assert "runtime_secret_generator:" in compose
+    assert "export CLICKHOUSE_USER=passport" in compose
+    assert "python - <<'PY'" in compose
+    assert "configs:" not in compose
     assert "python3 scripts/generate-env.py" in readme
     assert "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET=" in env_example
     assert "SERVICE_BASE64_64_PUBLIC_JWT_SECRET=" in env_example

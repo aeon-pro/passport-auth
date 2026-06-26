@@ -3,12 +3,42 @@ name: passport-auth
 services:
   secrets-init:
     image: python:3.13-slim
-    command: ["python", "/usr/local/bin/generate-runtime-secrets.py", "/run/passport-auth-secrets"]
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        python - <<'PY'
+        import secrets
+        import stat
+        import string
+        from pathlib import Path
+
+        secret_dir = Path("/run/passport-auth-secrets")
+        alphabet = string.ascii_letters + string.digits
+        filenames = (
+            "app_encryption_key",
+            "dashboard_jwt_secret",
+            "public_jwt_secret",
+            "postgres_password",
+            "clickhouse_password",
+        )
+
+        def random_secret():
+            return "".join(secrets.choice(alphabet) for _ in range(64))
+
+        secret_dir.mkdir(parents=True, exist_ok=True)
+        secret_dir.chmod(0o755)
+        for filename in filenames:
+            path = secret_dir / filename
+            if path.exists() and path.read_text(encoding="utf-8").strip():
+                if len(path.read_text(encoding="utf-8").strip()) < 32:
+                    raise SystemExit(f"{path} exists but is too short")
+            else:
+                path.write_text(random_secret() + "\n", encoding="utf-8")
+            path.chmod(0o444)
+        PY
     volumes:
       - runtime-secrets:/run/passport-auth-secrets
-    configs:
-      - source: runtime_secret_generator
-        target: /usr/local/bin/generate-runtime-secrets.py
     restart: "no"
 
   web:
@@ -80,15 +110,14 @@ services:
       - /bin/sh
       - -ec
       - |
-        export SERVICE_PASSWORD_64_CLICKHOUSE="`cat /run/passport-auth-secrets/clickhouse_password`"
+        export CLICKHOUSE_USER=passport
+        export CLICKHOUSE_PASSWORD="`cat /run/passport-auth-secrets/clickhouse_password`"
+        export SERVICE_PASSWORD_64_CLICKHOUSE="$$CLICKHOUSE_PASSWORD"
         exec /entrypoint.sh "$$@"
       - clickhouse-entrypoint
     volumes:
       - clickhouse-data:/var/lib/clickhouse
       - runtime-secrets:/run/passport-auth-secrets:ro
-    configs:
-      - source: clickhouse_passport_user
-        target: /etc/clickhouse-server/users.d/passport-user.xml
     depends_on:
       secrets-init:
         condition: service_completed_successfully
@@ -113,9 +142,3 @@ volumes:
     name: passport-auth_clickhouse-data
   dashboard-assets:
     name: passport-auth_dashboard-assets
-
-configs:
-  runtime_secret_generator:
-    file: ./scripts/generate-runtime-secrets.py
-  clickhouse_passport_user:
-    file: ./deploy/clickhouse/users.d/passport-user.xml
