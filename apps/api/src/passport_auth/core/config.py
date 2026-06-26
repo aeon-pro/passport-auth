@@ -8,6 +8,8 @@ KNOWN_INSECURE_SECRETS = {
     "local-development-secret-change-me",
     "passport-auth-change-this-stable-secret",
     "replace-with-a-32-byte-minimum-secret",
+    "replace-with-a-different-32-byte-minimum-secret",
+    "replace-with-another-32-byte-minimum-secret",
 }
 MIN_PRODUCTION_SECRET_LENGTH = 32
 

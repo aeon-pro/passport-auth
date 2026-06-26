@@ -67,7 +67,7 @@ Public API routes live under `/api/v1/auth/*`:
 ### Docker Compose
 
 ```bash
-cp .env.example .env
+python3 scripts/generate-env.py
 docker compose up --build
 ```
 
@@ -113,10 +113,10 @@ For production, change these values in Coolify instead of relying on the develop
 - `DASHBOARD_ASSET_DIR`, defaults to `/app/data/dashboard-assets` in Compose and is mounted
   to the `dashboard-assets` volume for uploaded logos
 
-Coolify may evaluate the Compose file with a build-time environment before runtime-only secrets
-are available. The Compose file therefore allows empty build-time substitutions, but production
-startup still fails unless the app secrets are set, and the database containers still require
-their runtime passwords to operate correctly.
+On Coolify, the Compose file auto-generates those app/database values with Coolify magic
+variables (`SERVICE_BASE64_64_*` and `SERVICE_PASSWORD_64_*`) when you do not set them yourself.
+The generated values are stable across redeploys and shared between services. Production startup
+still rejects empty or placeholder app secrets.
 
 The exposed web service still listens on container port `8000`.
 
