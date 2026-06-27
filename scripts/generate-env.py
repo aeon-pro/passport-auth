@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import secrets
 import stat
 import string
 from pathlib import Path
+
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_OUTPUT = ROOT / ".env"
@@ -17,12 +21,22 @@ def random_secret(length: int = SECRET_LENGTH) -> str:
     return "".join(secrets.choice(ALPHABET) for _ in range(length))
 
 
+def private_key_b64() -> str:
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private_key_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    return base64.b64encode(private_key_pem).decode("ascii")
+
+
 def build_env(*, app_env: str) -> str:
     values = {
         "APP_ENV": app_env,
         "SERVICE_BASE64_64_APP_ENCRYPTION_KEY": random_secret(),
         "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET": random_secret(),
-        "SERVICE_BASE64_64_PUBLIC_JWT_SECRET": random_secret(),
+        "PUBLIC_JWT_PRIVATE_KEY_B64": private_key_b64(),
         "DASHBOARD_JWT_TTL_SECONDS": "28800",
         "DASHBOARD_ASSET_DIR": "/app/data/dashboard-assets",
         "SERVICE_PASSWORD_64_POSTGRES": random_secret(),
@@ -36,7 +50,7 @@ def build_env(*, app_env: str) -> str:
             [
                 "SERVICE_BASE64_64_APP_ENCRYPTION_KEY",
                 "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET",
-                "SERVICE_BASE64_64_PUBLIC_JWT_SECRET",
+                "PUBLIC_JWT_PRIVATE_KEY_B64",
             ],
         ),
         (

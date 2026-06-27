@@ -110,10 +110,14 @@ For production, set these values in Coolify only if you need to override the bun
 
 The bundled Compose stack auto-generates app and database secrets on first startup in the
 `passport-auth_runtime-secrets` Docker volume. The web container maps those files to
-`APP_ENCRYPTION_KEY`, `DASHBOARD_JWT_SECRET`, `PUBLIC_JWT_SECRET`, `DATABASE_URL`, and
+`APP_ENCRYPTION_KEY`, `DASHBOARD_JWT_SECRET`, `PUBLIC_JWT_PRIVATE_KEY`, `DATABASE_URL`, and
 `CLICKHOUSE_URL` at startup. Keep the runtime secrets volume with the Postgres and ClickHouse
 volumes; deleting only the secrets volume while keeping database volumes will break existing
-database passwords.
+database passwords and change the public access-token signing key.
+
+Public app access tokens are signed with RS256. Passport Auth keeps the private key. Application
+backends should verify access tokens with the public key or JWKS shown in Dashboard Settings under
+Token verification, along with the displayed issuer and audience.
 
 The exposed web service still listens on container port `8000`.
 

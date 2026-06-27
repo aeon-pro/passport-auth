@@ -394,7 +394,9 @@ def issue_token_pair(
         user_id=user.id,
         email=user.email,
         role=user.role,
-        secret=settings.resolved_public_jwt_secret,
+        private_key_pem=settings.resolved_public_jwt_private_key,
+        issuer=settings.public_jwt_issuer,
+        audience=settings.public_jwt_audience,
         ttl_seconds=settings.public_access_token_ttl_seconds,
     )
     return TokenResponse(
@@ -1318,7 +1320,12 @@ def me(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated.")
 
     try:
-        payload = decode_public_access_token(token, secret=settings.resolved_public_jwt_secret)
+        payload = decode_public_access_token(
+            token,
+            public_key_pem=settings.public_jwt_public_key_pem,
+            issuer=settings.public_jwt_issuer,
+            audience=settings.public_jwt_audience,
+        )
     except InvalidTokenError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

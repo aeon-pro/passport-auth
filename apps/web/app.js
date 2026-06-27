@@ -1119,6 +1119,49 @@ function renderSetup() {
   renderOnboarding();
 }
 
+function renderTokenVerificationSection(tokenVerification = {}) {
+  const jwks = tokenVerification.jwks
+    ? JSON.stringify(tokenVerification.jwks, null, 2)
+    : "";
+
+  return `
+    <section class="settings-section">
+      <div class="section-heading">
+        <span class="eyebrow">Tokens</span>
+        <h3>Verification</h3>
+      </div>
+      <div class="guidance">
+        <div>
+          <span>Algorithm</span>
+          <code>${escapeHtml(tokenVerification.algorithm || "RS256")}</code>
+        </div>
+        <div>
+          <span>Key ID</span>
+          <code>${escapeHtml(tokenVerification.key_id || "")}</code>
+        </div>
+        <div>
+          <span>Issuer</span>
+          <code>${escapeHtml(tokenVerification.issuer || "")}</code>
+        </div>
+        <div>
+          <span>Audience</span>
+          <code>${escapeHtml(tokenVerification.audience || "")}</code>
+        </div>
+      </div>
+      <div class="form-grid two-columns">
+        <label class="field">
+          <span>Public key PEM</span>
+          <textarea rows="9" readonly>${escapeHtml(tokenVerification.public_key_pem || "")}</textarea>
+        </label>
+        <label class="field">
+          <span>JWKS</span>
+          <textarea rows="9" readonly>${escapeHtml(jwks)}</textarea>
+        </label>
+      </div>
+    </section>
+  `;
+}
+
 function renderOnboarding() {
   const step = onboardingSteps[state.onboardingStep];
   const isFinalStep = state.onboardingStep === onboardingSteps.length - 1;
@@ -2682,11 +2725,13 @@ function renderSettings() {
           </label>
           ${renderSectionSave("URLs")}
         </div>
-      </section>
+	      </section>
+	
+	      ${renderTokenVerificationSection(settings.token_verification)}
 
-      <section class="settings-section">
-        <div class="section-heading">
-          <span class="eyebrow">Email</span>
+	      <section class="settings-section">
+	        <div class="section-heading">
+	          <span class="eyebrow">Email</span>
           <h3>Resend</h3>
         </div>
         <div class="form-grid two-columns">

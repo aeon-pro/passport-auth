@@ -1,3 +1,4 @@
+import base64
 import subprocess
 import sys
 from pathlib import Path
@@ -43,12 +44,15 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "- APP_ENCRYPTION_KEY=" not in compose
     assert "- DASHBOARD_JWT_SECRET=" not in compose
     assert "- PUBLIC_JWT_SECRET=" not in compose
+    assert "- PUBLIC_JWT_PRIVATE_KEY=" not in compose
     assert (
         "SERVICE_BASE64_64_APP_ENCRYPTION_KEY=${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-}"
         in compose
     )
     assert "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET" in compose
-    assert "SERVICE_BASE64_64_PUBLIC_JWT_SECRET" in compose
+    assert "PUBLIC_JWT_PRIVATE_KEY_B64=${PUBLIC_JWT_PRIVATE_KEY_B64:-}" in compose
+    assert 'cat "$1"' in entrypoint
+    assert 'read_private_key_file "$secret_dir/public_jwt_private_key"' in entrypoint
     assert "DASHBOARD_JWT_TTL_SECONDS=${DASHBOARD_JWT_TTL_SECONDS:-28800}" in compose
     assert "must be set" not in compose
     assert "POSTGRES_PASSWORD:" not in compose
@@ -60,7 +64,7 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "configs:" not in compose
     assert "python3 scripts/generate-env.py" in readme
     assert "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET=" in env_example
-    assert "SERVICE_BASE64_64_PUBLIC_JWT_SECRET=" in env_example
+    assert "PUBLIC_JWT_PRIVATE_KEY_B64=" in env_example
     assert "DASHBOARD_JWT_TTL_SECONDS=28800" in env_example
     assert "SERVICE_PASSWORD_64_POSTGRES=" in env_example
     assert "SERVICE_PASSWORD_64_CLICKHOUSE=" in env_example
@@ -88,13 +92,15 @@ def test_generate_env_script_writes_secure_random_values(tmp_path) -> None:
     generated_keys = [
         "SERVICE_BASE64_64_APP_ENCRYPTION_KEY",
         "SERVICE_BASE64_64_DASHBOARD_JWT_SECRET",
-        "SERVICE_BASE64_64_PUBLIC_JWT_SECRET",
         "SERVICE_PASSWORD_64_POSTGRES",
         "SERVICE_PASSWORD_64_CLICKHOUSE",
     ]
 
     assert output.stat().st_mode & 0o077 == 0
     assert len({values[key] for key in generated_keys}) == len(generated_keys)
+    private_key = base64.b64decode(values["PUBLIC_JWT_PRIVATE_KEY_B64"]).decode("utf-8")
+    assert private_key.startswith("-----BEGIN PRIVATE KEY-----")
+    assert private_key.endswith("-----END PRIVATE KEY-----\n")
     for key in generated_keys:
         assert len(values[key]) == 64
         assert values[key].isalnum()
@@ -134,15 +140,22 @@ def test_runtime_secret_generator_writes_stable_secret_files(tmp_path) -> None:
     assert set(original_values) == {
         "app_encryption_key",
         "dashboard_jwt_secret",
-        "public_jwt_secret",
+        "public_jwt_private_key",
         "postgres_password",
         "clickhouse_password",
     }
     assert next_values == original_values
-    assert len(set(original_values.values())) == len(original_values)
-    for value in original_values.values():
+    random_values = [
+        value
+        for key, value in original_values.items()
+        if key != "public_jwt_private_key"
+    ]
+    assert len(set(random_values)) == len(random_values)
+    for value in random_values:
         assert len(value) == 64
         assert value.isalnum()
+    assert original_values["public_jwt_private_key"].startswith("-----BEGIN PRIVATE KEY-----")
+    assert original_values["public_jwt_private_key"].endswith("-----END PRIVATE KEY-----")
 
 
 def test_dashboard_app_uses_session_storage_for_dashboard_tokens() -> None:

@@ -1,13 +1,14 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from passport_auth.auth.tokens import generate_public_token_private_key_pem
 from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
 STRONG_ENCRYPTION_KEY = "environment-policy-encryption-key-32"
 STRONG_DASHBOARD_JWT_SECRET = "environment-policy-dashboard-jwt32"
-STRONG_PUBLIC_JWT_SECRET = "environment-policy-public-jwt-key32"
+PUBLIC_JWT_PRIVATE_KEY = generate_public_token_private_key_pem()
 
 
 def create_app_with_environment(app_env: str) -> object:
@@ -28,7 +29,7 @@ def create_app_with_environment(app_env: str) -> object:
             app_encryption_key=STRONG_ENCRYPTION_KEY,
             app_env=app_env,
             dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
-            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+            public_jwt_private_key=PUBLIC_JWT_PRIVATE_KEY,
         ),
         setup_store=setup_store,
     )

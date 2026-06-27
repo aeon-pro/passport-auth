@@ -6,13 +6,14 @@ from httpx import ASGITransport, AsyncClient
 
 from passport_auth.analytics import ClickHouseAnalyticsSink, NoopAnalyticsSink
 from passport_auth.auth.store import InMemoryAuthStore
+from passport_auth.auth.tokens import generate_public_token_private_key_pem
 from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
 STRONG_ENCRYPTION_KEY = "analytics-encryption-secret-value-32chars"
 STRONG_DASHBOARD_JWT_SECRET = "analytics-dashboard-jwt-secret-32chars"
-STRONG_PUBLIC_JWT_SECRET = "analytics-public-jwt-secret-value-32"
+PUBLIC_JWT_PRIVATE_KEY = generate_public_token_private_key_pem()
 
 
 def pkce_challenge(verifier: str) -> str:
@@ -61,7 +62,7 @@ def create_password_login_app(
             app_encryption_key=STRONG_ENCRYPTION_KEY,
             app_env=app_env,
             dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
-            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+            public_jwt_private_key=PUBLIC_JWT_PRIVATE_KEY,
         ),
         setup_store=setup_store,
         auth_store=auth_store,
@@ -79,7 +80,7 @@ def test_default_analytics_sink_is_clickhouse_only_in_production() -> None:
             app_env="production",
             app_encryption_key=STRONG_ENCRYPTION_KEY,
             dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
-            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+            public_jwt_private_key=PUBLIC_JWT_PRIVATE_KEY,
             clickhouse_url="http://clickhouse:8123/passport_auth",
         ),
         setup_store=setup_store,

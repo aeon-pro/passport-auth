@@ -1,23 +1,49 @@
 import base64
 import hashlib
+import json
 from urllib.parse import parse_qs, urlparse
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.hashes import SHA256
+from cryptography.hazmat.primitives.serialization import load_pem_public_key
 from httpx import ASGITransport, AsyncClient
 
 from passport_auth.auth.store import InMemoryAuthStore
+from passport_auth.auth.tokens import generate_public_token_private_key_pem
 from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import DashboardSettings, InMemorySetupStore
 
 STRONG_ENCRYPTION_KEY = "public-auth-encryption-secret-value-32"
 STRONG_DASHBOARD_JWT_SECRET = "public-auth-dashboard-jwt-secret-32"
-STRONG_PUBLIC_JWT_SECRET = "public-auth-public-jwt-secret-value"
+PUBLIC_JWT_PRIVATE_KEY = generate_public_token_private_key_pem()
+PUBLIC_TOKEN_ISSUER = "https://auth.example.com"
+PUBLIC_TOKEN_AUDIENCE = "app.example.com"
 
 
 def pkce_challenge(verifier: str) -> str:
     digest = hashlib.sha256(verifier.encode("utf-8")).digest()
     return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+
+
+def decode_jwt_part(token_part: str) -> dict[str, object]:
+    padding = "=" * (-len(token_part) % 4)
+    decoded = base64.urlsafe_b64decode((token_part + padding).encode("ascii"))
+    value = json.loads(decoded)
+    assert isinstance(value, dict)
+    return value
+
+
+def signing_input(token: str) -> bytes:
+    encoded_header, encoded_payload, _ = token.split(".", 2)
+    return f"{encoded_header}.{encoded_payload}".encode("ascii")
+
+
+def token_signature(token: str) -> bytes:
+    _, _, encoded_signature = token.split(".", 2)
+    padding = "=" * (-len(encoded_signature) % 4)
+    return base64.urlsafe_b64decode((encoded_signature + padding).encode("ascii"))
 
 
 class RecordingEmailSender:
@@ -78,7 +104,12 @@ def create_public_auth_app() -> tuple[InMemoryAuthStore, RecordingEmailSender, o
     auth_store = InMemoryAuthStore()
     email_sender = RecordingEmailSender()
     app = create_app(
-        settings=Settings(app_encryption_key="test-public-auth-secret", app_env="local"),
+        settings=Settings(
+            app_encryption_key="test-public-auth-secret",
+            app_env="local",
+            public_jwt_issuer=PUBLIC_TOKEN_ISSUER,
+            public_jwt_audience=PUBLIC_TOKEN_AUDIENCE,
+        ),
         setup_store=setup_store,
         auth_store=auth_store,
         auth_email_sender=email_sender,
@@ -182,6 +213,111 @@ async def test_public_password_register_requires_email_otp_before_issuing_auth_c
 
 
 @pytest.mark.asyncio
+async def test_public_access_token_is_rs256_with_verifier_claims() -> None:
+    verifier = "correct horse battery staple public verifier"
+    _, _, app = create_public_auth_app()
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        auth_code = await register_verified_user(
+            client,
+            email="claims@example.com",
+            verifier=verifier,
+        )
+        token_response = await client.post(
+            "/api/v1/auth/token",
+            json={
+                "code": auth_code["authorization_code"],
+                "code_verifier": verifier,
+            },
+        )
+
+    assert token_response.status_code == 200
+    access_token = token_response.json()["access_token"]
+    encoded_header, encoded_payload, _ = access_token.split(".", 2)
+    header = decode_jwt_part(encoded_header)
+    payload = decode_jwt_part(encoded_payload)
+
+    assert header["alg"] == "RS256"
+    assert header["typ"] == "JWT"
+    assert isinstance(header["kid"], str)
+    assert len(str(header["kid"])) >= 16
+    assert payload["iss"] == PUBLIC_TOKEN_ISSUER
+    assert payload["aud"] == PUBLIC_TOKEN_AUDIENCE
+    assert payload["sub"] == token_response.json()["user"]["id"]
+    assert payload["email"] == "claims@example.com"
+    assert payload["role"] == "user"
+    assert payload["type"] == "access"
+    assert isinstance(payload["iat"], int)
+    assert isinstance(payload["exp"], int)
+    assert payload["exp"] > payload["iat"]
+
+
+@pytest.mark.asyncio
+async def test_public_access_token_verifies_with_public_key_and_rejects_tampering() -> None:
+    verifier = "correct horse battery staple public verifier"
+    _, _, app = create_public_auth_app()
+    transport = ASGITransport(app=app)
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        auth_code = await register_verified_user(
+            client,
+            email="verified@example.com",
+            verifier=verifier,
+        )
+        token_response = await client.post(
+            "/api/v1/auth/token",
+            json={
+                "code": auth_code["authorization_code"],
+                "code_verifier": verifier,
+            },
+        )
+        dashboard_login = await client.post(
+            "/api/v1/dashboard/auth/login",
+            json={
+                "email": "owner@example.com",
+                "password": "correct-horse-battery-staple",
+            },
+        )
+        settings_response = await client.get(
+            "/api/v1/dashboard/settings",
+            headers={"Authorization": f"Bearer {dashboard_login.json()['access_token']}"},
+        )
+        me_response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token_response.json()['access_token']}"},
+        )
+
+        access_token = token_response.json()["access_token"]
+        encoded_header, encoded_payload, encoded_signature = access_token.split(".", 2)
+        tampered_payload = dict(decode_jwt_part(encoded_payload))
+        tampered_payload["email"] = "attacker@example.com"
+        tampered_encoded_payload = base64.urlsafe_b64encode(
+            json.dumps(tampered_payload, separators=(",", ":"), sort_keys=True).encode("utf-8")
+        ).rstrip(b"=").decode("ascii")
+        tampered_token = f"{encoded_header}.{tampered_encoded_payload}.{encoded_signature}"
+        tampered_response = await client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {tampered_token}"},
+        )
+
+    assert token_response.status_code == 200
+    assert dashboard_login.status_code == 200
+    assert settings_response.status_code == 200
+    assert me_response.status_code == 200
+    assert tampered_response.status_code == 401
+
+    public_key_pem = settings_response.json()["token_verification"]["public_key_pem"]
+    public_key = load_pem_public_key(public_key_pem.encode("utf-8"))
+    public_key.verify(
+        token_signature(access_token),
+        signing_input(access_token),
+        padding.PKCS1v15(),
+        SHA256(),
+    )
+
+
+@pytest.mark.asyncio
 async def test_public_auth_rejects_unknown_redirect_url() -> None:
     verifier = "correct horse battery staple public verifier"
     _, _, app = create_public_auth_app()
@@ -226,7 +362,7 @@ async def test_public_auth_request_validation_reports_redirect_url_mismatch() ->
             app_encryption_key=STRONG_ENCRYPTION_KEY,
             app_env="production",
             dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
-            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+            public_jwt_private_key=PUBLIC_JWT_PRIVATE_KEY,
         ),
         setup_store=setup_store,
         auth_store=InMemoryAuthStore(),

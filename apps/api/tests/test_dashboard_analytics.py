@@ -1,13 +1,14 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from passport_auth.auth.tokens import generate_public_token_private_key_pem
 from passport_auth.core.config import Settings
 from passport_auth.main import create_app
 from passport_auth.setup.store import InMemorySetupStore
 
 STRONG_ENCRYPTION_KEY = "dashboard-analytics-encryption-secret"
 STRONG_DASHBOARD_JWT_SECRET = "dashboard-analytics-dashboard-jwt"
-STRONG_PUBLIC_JWT_SECRET = "dashboard-analytics-public-jwt-key"
+PUBLIC_JWT_PRIVATE_KEY = generate_public_token_private_key_pem()
 
 
 async def login_owner(client: AsyncClient) -> str:
@@ -124,7 +125,7 @@ async def test_dashboard_analytics_returns_reader_summary_in_production() -> Non
             app_env="production",
             app_encryption_key=STRONG_ENCRYPTION_KEY,
             dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
-            public_jwt_secret=STRONG_PUBLIC_JWT_SECRET,
+            public_jwt_private_key=PUBLIC_JWT_PRIVATE_KEY,
             clickhouse_url="http://clickhouse:8123/passport_auth",
         ),
         analytics_reader=FakeAnalyticsReader(),

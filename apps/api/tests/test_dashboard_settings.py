@@ -24,6 +24,27 @@ DASHBOARD_INVITE_TEMPLATE = {
     "support_label": "Contact support",
     "support_url": "mailto:support@example.com",
 }
+PUBLIC_TOKEN_ISSUER = "https://auth.example.com"
+PUBLIC_TOKEN_AUDIENCE = "app.example.com"
+
+
+def assert_token_verification_payload(payload: dict[str, object]) -> None:
+    assert payload["algorithm"] == "RS256"
+    assert payload["issuer"] == PUBLIC_TOKEN_ISSUER
+    assert payload["audience"] == PUBLIC_TOKEN_AUDIENCE
+    assert isinstance(payload["key_id"], str)
+    assert len(str(payload["key_id"])) >= 16
+    assert str(payload["public_key_pem"]).startswith("-----BEGIN PUBLIC KEY-----")
+    assert str(payload["public_key_pem"]).endswith("-----END PUBLIC KEY-----\n")
+
+    jwks = payload["jwks"]
+    assert isinstance(jwks, dict)
+    assert jwks["keys"][0]["alg"] == "RS256"
+    assert jwks["keys"][0]["kid"] == payload["key_id"]
+    assert jwks["keys"][0]["kty"] == "RSA"
+    assert jwks["keys"][0]["use"] == "sig"
+    assert "n" in jwks["keys"][0]
+    assert "e" in jwks["keys"][0]
 
 
 async def login_owner(client: AsyncClient) -> str:
@@ -44,7 +65,11 @@ def create_test_app() -> object:
         password="correct-horse-battery-staple",
     )
     return create_app(
-        settings=Settings(app_encryption_key="test-jwt-secret"),
+        settings=Settings(
+            app_encryption_key="test-jwt-secret",
+            public_jwt_issuer=PUBLIC_TOKEN_ISSUER,
+            public_jwt_audience=PUBLIC_TOKEN_AUDIENCE,
+        ),
         setup_store=setup_store,
     )
 
@@ -71,7 +96,11 @@ async def test_dashboard_settings_return_defaults() -> None:
         )
 
     assert response.status_code == 200
-    assert response.json() == {
+    body = response.json()
+    token_verification = body.pop("token_verification")
+    assert_token_verification_payload(token_verification)
+    assert "private" not in response.text.lower()
+    assert body == {
         "app_domain": "",
         "auth_domain": "",
         "allowed_origins": [],
@@ -214,7 +243,11 @@ async def test_dashboard_settings_save_config_without_exposing_secrets() -> None
 
     assert save_response.status_code == 200
     assert read_response.status_code == 200
-    assert read_response.json() == {
+    body = read_response.json()
+    token_verification = body.pop("token_verification")
+    assert_token_verification_payload(token_verification)
+    assert "private" not in read_response.text.lower()
+    assert body == {
         "app_domain": "app.example.com",
         "auth_domain": "auth.example.com",
         "allowed_origins": [

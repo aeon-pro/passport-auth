@@ -6,9 +6,11 @@ from pydantic import BaseModel, Field, field_validator
 
 from passport_auth.api.v1.dashboard_auth import (
     get_current_dashboard_user,
+    get_settings,
     get_setup_store,
     require_owner,
 )
+from passport_auth.core.config import Settings
 from passport_auth.setup.store import (
     DashboardSettings,
     EmailTemplate,
@@ -68,6 +70,16 @@ class DashboardSettingsResponse(BaseModel):
     google_oauth_enabled: bool
     password_reset_otp_enabled: bool
     email_templates: list[EmailTemplateModel]
+    token_verification: "TokenVerificationResponse"
+
+
+class TokenVerificationResponse(BaseModel):
+    algorithm: str
+    key_id: str
+    issuer: str
+    audience: str
+    public_key_pem: str
+    jwks: dict[str, object]
 
 
 class DashboardBrandingResponse(BaseModel):
@@ -125,7 +137,22 @@ class DashboardSettingsUpdate(BaseModel):
         return [item.strip() for item in value if item.strip()]
 
 
-def build_settings_response(settings: DashboardSettings) -> DashboardSettingsResponse:
+def build_token_verification_response(settings: Settings) -> TokenVerificationResponse:
+    return TokenVerificationResponse(
+        algorithm="RS256",
+        key_id=settings.public_jwt_key_id,
+        issuer=settings.public_jwt_issuer,
+        audience=settings.public_jwt_audience,
+        public_key_pem=settings.public_jwt_public_key_pem,
+        jwks=settings.public_jwt_jwks,
+    )
+
+
+def build_settings_response(
+    settings: DashboardSettings,
+    *,
+    runtime_settings: Settings,
+) -> DashboardSettingsResponse:
     return DashboardSettingsResponse(
         app_domain=settings.app_domain,
         auth_domain=settings.auth_domain,
@@ -159,6 +186,7 @@ def build_settings_response(settings: DashboardSettings) -> DashboardSettingsRes
             )
             for template in settings.email_templates
         ],
+        token_verification=build_token_verification_response(runtime_settings),
     )
 
 
@@ -175,9 +203,13 @@ def build_branding_response(settings: DashboardSettings) -> DashboardBrandingRes
 def get_dashboard_settings(
     owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> DashboardSettingsResponse:
     require_owner(owner)
-    return build_settings_response(setup_store.get_dashboard_settings())
+    return build_settings_response(
+        setup_store.get_dashboard_settings(),
+        runtime_settings=settings,
+    )
 
 
 @router.get("/branding")
@@ -192,6 +224,7 @@ def update_dashboard_settings(
     payload: DashboardSettingsUpdate,
     owner: Annotated[OwnerAccount, Depends(get_current_dashboard_user)],
     setup_store: Annotated[SetupStore, Depends(get_setup_store)],
+    settings: Annotated[Settings, Depends(get_settings)],
 ) -> DashboardSettingsResponse:
     require_owner(owner)
     current = setup_store.get_dashboard_settings()
@@ -218,4 +251,4 @@ def update_dashboard_settings(
 
     updated_settings = replace(current, **updates)
     saved_settings = setup_store.save_dashboard_settings(updated_settings)
-    return build_settings_response(saved_settings)
+    return build_settings_response(saved_settings, runtime_settings=settings)

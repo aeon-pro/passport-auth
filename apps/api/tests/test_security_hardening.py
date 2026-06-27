@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 
 from passport_auth.analytics import disabled_analytics_summary
 from passport_auth.auth.store import InMemoryAuthStore, PostgresAuthStore
+from passport_auth.auth.tokens import generate_public_token_private_key_pem
 from passport_auth.core.config import Settings
 from passport_auth.core.rate_limit import RedisRateLimiter
 from passport_auth.dashboard.tokens import create_dashboard_token
@@ -13,7 +14,7 @@ from passport_auth.setup.store import DashboardSettings, InMemorySetupStore, Pos
 
 STRONG_ENCRYPTION_KEY = "enc-test-secret-value-that-is-long-enough"
 STRONG_DASHBOARD_JWT_SECRET = "dash-test-secret-value-that-is-long-enough"
-STRONG_PUBLIC_JWT_SECRET = "public-test-secret-value-that-is-long-enough"
+PUBLIC_JWT_PRIVATE_KEY = generate_public_token_private_key_pem()
 
 
 class FakeAnalyticsReader:
@@ -37,7 +38,7 @@ def production_settings(**overrides) -> Settings:
         "app_env": "production",
         "app_encryption_key": STRONG_ENCRYPTION_KEY,
         "dashboard_jwt_secret": STRONG_DASHBOARD_JWT_SECRET,
-        "public_jwt_secret": STRONG_PUBLIC_JWT_SECRET,
+        "public_jwt_private_key": PUBLIC_JWT_PRIVATE_KEY,
     }
     values.update(overrides)
     return Settings(**values)
@@ -80,6 +81,20 @@ def test_production_rejects_known_default_runtime_secrets() -> None:
             settings=Settings(
                 app_env="production",
                 app_encryption_key="passport-auth-change-this-stable-secret",
+            ),
+            setup_store=setup_store,
+        )
+
+
+def test_production_requires_public_jwt_private_key() -> None:
+    setup_store = create_setup_store_with_owner()
+
+    with pytest.raises(RuntimeError, match="PUBLIC_JWT_PRIVATE_KEY"):
+        create_app(
+            settings=Settings(
+                app_env="production",
+                app_encryption_key=STRONG_ENCRYPTION_KEY,
+                dashboard_jwt_secret=STRONG_DASHBOARD_JWT_SECRET,
             ),
             setup_store=setup_store,
         )
