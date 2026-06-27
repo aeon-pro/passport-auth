@@ -15,12 +15,12 @@ services:
 
         secret_dir = Path("/run/passport-auth-secrets")
         alphabet = string.ascii_letters + string.digits
-	        filenames = (
-	            "app_encryption_key",
-	            "dashboard_jwt_secret",
-	            "postgres_password",
-	            "clickhouse_password",
-	        )
+        filenames = (
+            "app_encryption_key",
+            "dashboard_jwt_secret",
+            "postgres_password",
+            "clickhouse_password",
+        )
 
         def random_secret():
             return "".join(secrets.choice(alphabet) for _ in range(64))
@@ -50,16 +50,16 @@ services:
       - DASHBOARD_ASSET_DIR=${DASHBOARD_ASSET_DIR:-/app/data/dashboard-assets}
       - DASHBOARD_JWT_TTL_SECONDS=${DASHBOARD_JWT_TTL_SECONDS:-28800}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-	      - SERVICE_BASE64_64_APP_ENCRYPTION_KEY=${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-}
-	      - SERVICE_BASE64_64_DASHBOARD_JWT_SECRET=${SERVICE_BASE64_64_DASHBOARD_JWT_SECRET:-}
-	      - PUBLIC_JWT_PRIVATE_KEY_B64=${PUBLIC_JWT_PRIVATE_KEY_B64:-}
-	      - SERVICE_PASSWORD_64_POSTGRES=${SERVICE_PASSWORD_64_POSTGRES:-}
-	      - SERVICE_PASSWORD_64_CLICKHOUSE=${SERVICE_PASSWORD_64_CLICKHOUSE:-}
+      - SERVICE_BASE64_64_APP_ENCRYPTION_KEY=${SERVICE_BASE64_64_APP_ENCRYPTION_KEY:-}
+      - SERVICE_BASE64_64_DASHBOARD_JWT_SECRET=${SERVICE_BASE64_64_DASHBOARD_JWT_SECRET:-}
+      - PUBLIC_JWT_PRIVATE_KEY_B64=${PUBLIC_JWT_PRIVATE_KEY_B64:-}
+      - SERVICE_PASSWORD_64_POSTGRES=${SERVICE_PASSWORD_64_POSTGRES:-}
+      - SERVICE_PASSWORD_64_CLICKHOUSE=${SERVICE_PASSWORD_64_CLICKHOUSE:-}
     expose:
       - "8000"
     volumes:
-	      - dashboard-assets:/app/data/dashboard-assets
-	      - runtime-secrets:/run/passport-auth-secrets
+      - dashboard-assets:/app/data/dashboard-assets
+      - runtime-secrets:/run/passport-auth-secrets
     depends_on:
       secrets-init:
         condition: service_completed_successfully

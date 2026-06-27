@@ -1,4 +1,5 @@
 import base64
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -72,6 +73,32 @@ def test_compose_persists_dashboard_uploaded_assets() -> None:
     assert "CLICKHOUSE_PASSWORD=" not in env_example
     assert "DATABASE_URL=" not in env_example
     assert "CLICKHOUSE_URL=" not in env_example
+
+
+def test_compose_file_uses_space_indentation_and_renders_services() -> None:
+    compose_path = ROOT / "docker-compose.yaml"
+    compose = compose_path.read_text(encoding="utf-8")
+
+    assert "\t" not in compose
+
+    if not shutil.which("docker"):
+        return
+
+    result = subprocess.run(
+        ["docker", "compose", "-f", str(compose_path), "config", "--services"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    assert set(result.stdout.splitlines()) == {
+        "clickhouse",
+        "postgres",
+        "redis",
+        "secrets-init",
+        "web",
+    }
 
 
 def test_generate_env_script_writes_secure_random_values(tmp_path) -> None:
