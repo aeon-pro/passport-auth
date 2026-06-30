@@ -44,7 +44,8 @@ def test_static_dashboard_uses_dark_studio_workspace_design() -> None:
     assert "rail-nav" not in styles_css
     assert "workspace-sidebar" in styles_css
     assert "workspace-topbar" in styles_css
-    assert "toolbar-search" in styles_css
+    assert "toolbar-search" not in app_js
+    assert "toolbar-search" not in styles_css
     assert "obsidian-grid" not in styles_css
     assert "kinetic-line" not in styles_css
     assert "font-size: 54px;" not in h2_body

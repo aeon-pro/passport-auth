@@ -1079,7 +1079,6 @@ function renderSidebarProfile() {
 function renderAppShell(content) {
   const path = currentPath();
   const meta = currentRouteMeta();
-  const brandName = currentBrandName();
 
   app.className = "app-shell studio-shell";
   app.innerHTML = `
@@ -1105,10 +1104,6 @@ function renderAppShell(content) {
         <div>
           <strong>${escapeHtml(meta.title)}</strong>
           <small>${escapeHtml(meta.hint)}</small>
-        </div>
-        <div class="toolbar-search" aria-hidden="true">
-          <span>${renderRouteIcon("home")}</span>
-          <strong>${escapeHtml(brandName)}</strong>
         </div>
       </header>
       <section class="workspace studio-main">${content}</section>
