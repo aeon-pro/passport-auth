@@ -1,6 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).parents[3]
+UI_VERSION = "2026-06-30-dark-admin-ui"
 
 
 def test_dashboard_toggle_css_keeps_knobs_centered() -> None:
@@ -23,4 +24,21 @@ def test_onboarding_requires_real_sign_in_method() -> None:
 def test_dashboard_static_assets_have_cache_busted_ui_version() -> None:
     index_html = (ROOT / "apps" / "web" / "index.html").read_text(encoding="utf-8")
 
-    assert "2026-06-26-toggle-ui" in index_html
+    assert UI_VERSION in index_html
+
+
+def test_dashboard_dark_admin_theme_contract() -> None:
+    css = (ROOT / "apps" / "web" / "styles.css").read_text(encoding="utf-8")
+
+    assert "--app-bg: #080809;" in css
+    assert "--sidebar-width: 286px;" in css
+    assert "--surface-muted: #151517;" in css
+    assert "background: var(--app-bg);" in css
+    assert "border-radius: 8px;" in css
+
+
+def test_dashboard_sidebar_renders_route_icons() -> None:
+    app_js = (ROOT / "apps" / "web" / "app.js").read_text(encoding="utf-8")
+
+    assert 'class="nav-icon"' in app_js
+    assert '${renderRouteIcon(routeMeta[route.href]?.icon || "home")}' in app_js

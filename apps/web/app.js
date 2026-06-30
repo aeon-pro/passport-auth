@@ -1090,6 +1090,7 @@ function renderAppShell(content) {
           .map(
             (route) => `
               <a href="${route.href}" data-link class="${route.href === path ? "active" : ""}">
+                <span class="nav-icon">${renderRouteIcon(routeMeta[route.href]?.icon || "home")}</span>
                 <span>${route.label}</span>
               </a>
             `,
