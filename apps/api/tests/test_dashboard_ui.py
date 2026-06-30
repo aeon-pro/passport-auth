@@ -42,3 +42,10 @@ def test_dashboard_sidebar_renders_route_icons() -> None:
 
     assert 'class="nav-icon"' in app_js
     assert '${renderRouteIcon(routeMeta[route.href]?.icon || "home")}' in app_js
+
+
+def test_dashboard_shell_topbar_does_not_stretch_on_short_pages() -> None:
+    css = (ROOT / "apps" / "web" / "styles.css").read_text(encoding="utf-8")
+
+    assert "grid-template-rows: auto minmax(0, 1fr);" in css
+    assert "align-content: start;" in css
