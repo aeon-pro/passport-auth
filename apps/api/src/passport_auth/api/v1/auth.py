@@ -287,6 +287,12 @@ def validate_redirect_url(
     if redirect_url in dashboard_settings.redirect_urls:
         return
 
+    if any(
+        registered_redirect_url_allows_query_params(registered_url, redirect_url)
+        for registered_url in dashboard_settings.redirect_urls
+    ):
+        return
+
     if is_development_environment(app_env) and is_local_development_url(redirect_url):
         return
 
@@ -297,6 +303,22 @@ def validate_redirect_url(
             redirect_url,
             app_env=app_env,
         ),
+    )
+
+
+def registered_redirect_url_allows_query_params(registered_url: str, redirect_url: str) -> bool:
+    registered = urllib.parse.urlsplit(registered_url)
+    requested = urllib.parse.urlsplit(redirect_url)
+    if registered.query or registered.fragment or requested.fragment:
+        return False
+    return bool(requested.query) and (
+        registered.scheme.lower(),
+        registered.netloc.lower(),
+        registered.path,
+    ) == (
+        requested.scheme.lower(),
+        requested.netloc.lower(),
+        requested.path,
     )
 
 

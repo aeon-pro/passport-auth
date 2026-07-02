@@ -620,6 +620,7 @@ async def test_public_google_oauth_start_and_callback_issue_auth_code_with_googl
                 "code_challenge": pkce_challenge(verifier),
             },
         )
+        assert start_response.status_code == 200
         authorization_url = start_response.json()["authorization_url"]
         state = parse_qs(urlparse(authorization_url).query)["state"][0]
         callback_response = await client.get(
@@ -641,3 +642,45 @@ async def test_public_google_oauth_start_and_callback_issue_auth_code_with_googl
     assert "authorization_code" in callback_response.json()
     assert token_response.status_code == 200
     assert token_response.json()["user"]["name"] == "Google User"
+
+
+@pytest.mark.asyncio
+async def test_public_google_oauth_allows_registered_callback_with_query_params() -> None:
+    auth_store, _, app = create_public_auth_app()
+    auth_store.create_user(email="google@example.com")
+    transport = ASGITransport(app=app)
+    verifier = "correct horse battery staple public verifier"
+    redirect_url = "https://app.example.com/auth/callback?flow_id=chartai-flow"
+
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        start_response = await client.get(
+            "/api/v1/auth/google/start",
+            params={
+                "redirect_url": redirect_url,
+                "code_challenge": pkce_challenge(verifier),
+            },
+        )
+        assert start_response.status_code == 200
+        authorization_url = start_response.json()["authorization_url"]
+        state = parse_qs(urlparse(authorization_url).query)["state"][0]
+        callback_response = await client.get(
+            "/api/v1/auth/google/callback",
+            params={"state": state, "code": "google-provider-code"},
+            follow_redirects=False,
+        )
+        location = callback_response.headers["location"]
+        callback_query = parse_qs(urlparse(location).query)
+        token_response = await client.post(
+            "/api/v1/auth/token",
+            json={
+                "code": callback_query["code"][0],
+                "code_verifier": verifier,
+            },
+        )
+
+    assert start_response.status_code == 200
+    assert callback_response.status_code == 307
+    assert location.startswith("https://app.example.com/auth/callback?")
+    assert callback_query["flow_id"] == ["chartai-flow"]
+    assert token_response.status_code == 200
+    assert token_response.json()["user"]["email"] == "google@example.com"
